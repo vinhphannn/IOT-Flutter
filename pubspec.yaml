@@ -1,0 +1,28 @@
+name: flutter_mobile
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  smooth_page_indicator: ^2.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+# Phần quan trọng nhất ở đây
+flutter:
+  uses-material-design: true
+
+  # Khai báo assets (Thụt vào 2 dấu cách so với chữ flutter)
+  assets:
+    # Chỉ cần dòng này là nó tự nhận hết ảnh trong thư mục
+    - assets/images/
