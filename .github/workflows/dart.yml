@@ -1,0 +1,75 @@
+name: iOS Unsigned IPA Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      # 1. Checkout source
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Setup Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          architecture: x64
+
+      # 3. Get dependencies
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # 4. Install CocoaPods
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      # 5. Generate iOS config (KHÔNG BUILD DEVICE)
+      - name: Flutter config only
+        run: flutter build ios --release --no-codesign --config-only
+
+      # 6. Xcode build iphoneos (UNSIGNED)
+      - name: Xcode build unsigned
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CONFIGURATION_BUILD_DIR=$GITHUB_WORKSPACE/build/ios/iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      # 7. Create IPA (IPA = ZIP Payload)
+      - name: Create IPA
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          mv Runner.app Payload/
+          zip -r FlutterIpaExport.ipa Payload
+
+      # 8. Create tag (if not exists)
+      - name: Create git tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag v1.0 || true
+          git push origin v1.0 || true
+
+      # 9. Upload IPA to GitHub Release (KHÔNG ZIP LẠI)
+      - name: Upload IPA to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/ios/iphoneos/FlutterIpaExport.ipa
+          tag: v1.0
+          overwrite: true
+          body: "iOS unsigned IPA (TrollStore / ESign compatible)"
