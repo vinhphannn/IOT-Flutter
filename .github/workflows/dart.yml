@@ -23,17 +23,28 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # 4. Generate iOS files (TẠO Podfile)
-      - name: Flutter generate iOS config
-        run: flutter build ios --release --no-codesign --config-only
+      # 4. Create iOS project if it doesn't exist
+      - name: Create iOS project
+        run: |
+          if [ ! -d "ios" ]; then
+            flutter create --platforms=ios .
+          fi
 
-      # 5. Install CocoaPods (SAU khi có Podfile)
+      # 5. Generate iOS files (creates Podfile if missing)
+      - name: Flutter generate iOS config
+        run: |
+          flutter build ios --release --no-codesign --config-only
+
+      # 6. Install CocoaPods
       - name: Install CocoaPods
         run: |
           cd ios
+          # First, update CocoaPods itself
+          sudo gem install cocoapods
+          # Then install pods
           pod install --repo-update
 
-      # 6. Xcode build unsigned
+      # 7. Xcode build unsigned
       - name: Xcode build unsigned
         run: |
           cd ios
@@ -48,23 +59,29 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      # 7. Create IPA (KHÔNG NÉN LẠI)
+      # 8. Create IPA
       - name: Create IPA
         run: |
+          mkdir -p build/ios/iphoneos
           cd build/ios/iphoneos
-          mkdir Payload
+          mkdir -p Payload
           mv Runner.app Payload/
           zip -r FlutterIpaExport.ipa Payload
 
-      # 8. Create git tag (nếu chưa có)
+      # 9. Create git tag (if needed)
       - name: Create git tag
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git tag v1.0 || true
-          git push origin v1.0 || true
+          # Only create tag if it doesn't exist
+          if git rev-parse v1.0 >/dev/null 2>&1; then
+            echo "Tag v1.0 already exists"
+          else
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+            git tag v1.0
+            git push origin v1.0
+          fi
 
-      # 9. Upload IPA to GitHub Release
+      # 10. Upload IPA to GitHub Release
       - name: Upload IPA to Release
         uses: svenstaro/upload-release-action@v2
         with:
