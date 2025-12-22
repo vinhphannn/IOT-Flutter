@@ -19,21 +19,21 @@ jobs:
           channel: stable
           architecture: x64
 
-      # 3. Get dependencies
+      # 3. Get Dart dependencies
       - name: Flutter pub get
         run: flutter pub get
 
-      # 4. Install CocoaPods
+      # 4. Generate iOS files (TẠO Podfile)
+      - name: Flutter generate iOS config
+        run: flutter build ios --release --no-codesign --config-only
+
+      # 5. Install CocoaPods (SAU khi có Podfile)
       - name: Install CocoaPods
         run: |
           cd ios
           pod install --repo-update
 
-      # 5. Generate iOS config (KHÔNG BUILD DEVICE)
-      - name: Flutter config only
-        run: flutter build ios --release --no-codesign --config-only
-
-      # 6. Xcode build iphoneos (UNSIGNED)
+      # 6. Xcode build unsigned
       - name: Xcode build unsigned
         run: |
           cd ios
@@ -48,7 +48,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      # 7. Create IPA (IPA = ZIP Payload)
+      # 7. Create IPA (KHÔNG NÉN LẠI)
       - name: Create IPA
         run: |
           cd build/ios/iphoneos
@@ -56,7 +56,7 @@ jobs:
           mv Runner.app Payload/
           zip -r FlutterIpaExport.ipa Payload
 
-      # 8. Create tag (if not exists)
+      # 8. Create git tag (nếu chưa có)
       - name: Create git tag
         run: |
           git config user.name "github-actions"
@@ -64,7 +64,7 @@ jobs:
           git tag v1.0 || true
           git push origin v1.0 || true
 
-      # 9. Upload IPA to GitHub Release (KHÔNG ZIP LẠI)
+      # 9. Upload IPA to GitHub Release
       - name: Upload IPA to Release
         uses: svenstaro/upload-release-action@v2
         with:
