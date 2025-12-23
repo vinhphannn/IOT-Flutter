@@ -1,227 +1,60 @@
-name: iOS Unsigned IPA Release
+name: iOS-ipa-build
 
 on:
   workflow_dispatch:
 
 jobs:
   build-ios:
+    name: 🎉 iOS Build
     runs-on: macos-latest
 
     steps:
-      # 1. Checkout source
-      - name: Checkout
-        uses: actions/checkout@v4
+      # Lấy code
+      - uses: actions/checkout@v3
 
-      # 2. Setup Flutter
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      # Cài Flutter
+      - uses: subosito/flutter-action@v2
         with:
-          channel: stable
-          flutter-version: '3.38.5'
+          channel: 'stable'
+          architecture: x64
 
-      # 3. Get Dart dependencies
-      - name: Flutter pub get
-        run: flutter pub get
+      # Cài dependencies
+      - run: flutter pub get
 
-      # 4. KIỂM TRA VÀ TẠO IOS PROJECT ĐÚNG CÁCH
-      - name: Setup iOS project
+      # Cập nhật pod
+      - run: pod repo update
+        working-directory: ios
+
+      # Build iOS không ký
+      - run: flutter build ios --release --no-codesign
+
+      # Chuẩn bị thư mục Payload
+      - run: mkdir Payload
+        working-directory: build/ios/iphoneos
+
+      # Đưa Runner.app vào Payload
+      - run: mv Runner.app/ Payload
+        working-directory: build/ios/iphoneos
+
+      # Nén thành file IPA
+      - name: Zip output
+        run: zip -qq -r -9 FlutterIpaExport.ipa Payload
+        working-directory: build/ios/iphoneos
+
+      # Tạo tag nếu chưa có
+      - name: Create tag if not exists
         run: |
-          echo "=== Current Flutter project status ==="
-          flutter config --machine
-          
-          echo "=== Listing Flutter platforms ==="
-          flutter config --platforms
-          
-          echo "=== Checking iOS project ==="
-          if [ -d "ios" ]; then
-            echo "iOS directory exists, but checking if it's valid..."
-            
-            # Kiểm tra xem có phải là Flutter iOS project không
-            if [ -f "ios/Runner.xcodeproj/project.pbxproj" ]; then
-              echo "✅ iOS project exists"
-              
-              # Kiểm tra Podfile
-              if [ -f "ios/Podfile" ]; then
-                echo "✅ Podfile exists"
-                echo "Podfile content:"
-                head -20 ios/Podfile
-              else
-                echo "❌ Podfile missing, but iOS project exists"
-                echo "This might be an old/invalid iOS project"
-                
-                # Xóa và tạo lại
-                echo "=== Recreating iOS project ==="
-                rm -rf ios
-                flutter create --platforms=ios --org com.example.app .
-              fi
-            else
-              echo "❌ ios/Runner.xcodeproj not found - invalid iOS project"
-              rm -rf ios
-              flutter create --platforms=ios --org com.example.app .
-            fi
-          else
-            echo "❌ iOS directory not found, creating..."
-            flutter create --platforms=ios --org com.example.app .
-          fi
-          
-          echo "=== Final iOS structure ==="
-          find ios -type f -name "Podfile" -o -name "*.xcodeproj" -o -name "*.xcworkspace" | head -20
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag v1.0 || true
+          git push origin v1.0 || true
 
-      # 5. TẠO PODFILE VỚI FLUTTER PLUGINS
-      - name: Generate Podfile with Flutter plugins
-        run: |
-          echo "=== Generating Flutter plugins ==="
-          
-          # Phương pháp 1: Dùng flutter build để tạo .flutter-plugins-dependencies
-          flutter build ios --config-only --no-codesign --verbose 2>&1 | tail -50 || true
-          
-          # Phương pháp 2: Kiểm tra và tạo thủ công nếu cần
-          if [ ! -f "ios/Podfile" ]; then
-            echo "Podfile still missing, trying manual method..."
-            
-            # Tạo Podfile từ template
-            cd ios
-            pod init
-            
-            # Thêm Flutter template vào Podfile
-            cat >> Podfile << 'EOF'
-            # Add Flutter Pods
-            flutter_application_path = '../'
-            load File.join(flutter_application_path, '.ios', 'Flutter', 'podhelper.rb') if File.exist?(File.join(flutter_application_path, '.ios', 'Flutter', 'podhelper.rb'))
-            
-            target 'Runner' do
-              # Flutter Pods
-              flutter_install_all_ios_pods flutter_application_path
-            end
-            EOF
-            
-            cd ..
-          fi
-          
-          # Kiểm tra Podfile
-          if [ -f "ios/Podfile" ]; then
-            echo "✅ Podfile created successfully"
-            echo "=== Podfile preview ==="
-            head -30 ios/Podfile
-          else
-            echo "❌ ERROR: Still no Podfile!"
-            echo "Creating minimal Podfile..."
-            
-            cat > ios/Podfile << 'EOF'
-            platform :ios, '12.0'
-            
-            # Flutter framework
-            pod 'Flutter', :path => '.symlinks/flutter/ios-release'
-            
-            # Plugin pods
-            
-            target 'Runner' do
-              use_frameworks!
-              
-              # Flutter Pod
-              pod 'Flutter', :path => '.symlinks/flutter/ios-release'
-            end
-            
-            post_install do |installer|
-              installer.pods_project.targets.each do |target|
-                target.build_configurations.each do |config|
-                  config.build_settings['ENABLE_BITCODE'] = 'NO'
-                  config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
-                end
-              end
-            end
-            EOF
-            
-            echo "Manual Podfile created"
-          fi
-
-      # 6. CÀI ĐẶT COCOAPODS VỚI FALLBACK
-      - name: Install CocoaPods dependencies
-        run: |
-          echo "=== Installing CocoaPods ==="
-          
-          # Cài đặt CocoaPods mới nhất
-          sudo gem install cocoapods
-          
-          # Cập nhật repo
-          pod repo update
-          
-          echo "=== Running pod install ==="
-          cd ios
-          
-          # Thử pod install, nếu fail thì thử install lại
-          if ! pod install --verbose --repo-update; then
-            echo "pod install failed, trying with --clean-install..."
-            pod install --verbose --clean-install
-          fi
-
-      # 7. BUILD VỚI XCODE (đã sửa lỗi đường dẫn)
-      - name: Xcode build unsigned
-        run: |
-          echo "=== Starting Xcode build ==="
-          
-          # Tạo thư mục build output
-          mkdir -p $GITHUB_WORKSPACE/build/ios
-          
-          cd ios
-          xcodebuild \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/ios/iphoneos" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            clean build
-
-      # 8. TẠO IPA
-      - name: Create IPA
-        run: |
-          echo "=== Creating IPA ==="
-          cd $GITHUB_WORKSPACE/build/ios/iphoneos
-          
-          # Kiểm tra xem Runner.app có tồn tại không
-          if [ -d "Runner.app" ]; then
-            echo "✅ Runner.app found, creating IPA..."
-            mkdir -p Payload
-            mv Runner.app Payload/
-            zip -r FlutterIpaExport.ipa Payload
-            echo "IPA created at: $(pwd)/FlutterIpaExport.ipa"
-            ls -lh FlutterIpaExport.ipa
-          else
-            echo "❌ ERROR: Runner.app not found!"
-            echo "Contents of build directory:"
-            ls -la
-            exit 1
-          fi
-
-      # 9. Upload artifact để debug
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      # Upload IPA vào Release
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
         with:
-          name: ios-build-artifacts
-          path: |
-            ${{ github.workspace }}/build/ios/
-            ${{ github.workspace }}/ios/Podfile
-            ${{ github.workspace }}/ios/Podfile.lock
-          retention-days: 1
-
-      # 10. Create release và upload IPA
-      - name: Create Release and Upload IPA
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_NAME="v1.0-$(date +%Y%m%d-%H%M%S)"
-          
-          # Tạo release
-          gh release create $TAG_NAME \
-            --title "iOS Build $TAG_NAME" \
-            --notes "Automated iOS unsigned IPA build" \
-            --prerelease
-          
-          # Upload IPA
-          gh release upload $TAG_NAME \
-            $GITHUB_WORKSPACE/build/ios/iphoneos/FlutterIpaExport.ipa \
-            --clobber
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/ios/iphoneos/FlutterIpaExport.ipa
+          tag: v1.0
+          overwrite: true
+          body: "This is first release"
