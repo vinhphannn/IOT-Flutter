@@ -14,6 +14,8 @@ import 'screens/auth/new_password_screen.dart';
 import 'screens/auth/reset_password_success_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/device/add_device_screen.dart';
+import 'screens/device/connect_device_screen.dart';
+import 'screens/device/connected_success_screen.dart';
 
 class AppRoutes {
   // Định nghĩa tên Routes
@@ -32,6 +34,8 @@ class AppRoutes {
   static const String resetPassword = '/reset-password';
   static const String resetPasswordSuccess = '/reset-password-success';
   static const String addDevice = '/add-device';
+  static const String connectDevice = '/connect-device';
+  static const String connectedSuccess = '/connected-success';
 
   // Hàm điều hướng
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -84,6 +88,19 @@ class AppRoutes {
 
       case addDevice: // <-- Thêm case này
         return MaterialPageRoute(builder: (_) => const AddDeviceScreen());
+
+      case connectDevice:
+        // Lấy dữ liệu DeviceItem được truyền sang
+        final device = settings.arguments as DeviceItem;
+        return MaterialPageRoute(
+          builder: (_) => ConnectDeviceScreen(device: device),
+        );
+
+      case connectedSuccess:
+        final device = settings.arguments as DeviceItem;
+        return MaterialPageRoute(
+          builder: (_) => ConnectedSuccessScreen(device: device),
+        );
 
       default:
         return _errorRoute();
