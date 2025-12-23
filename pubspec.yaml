@@ -12,6 +12,9 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   smooth_page_indicator: ^2.0.1
+  flutter_map: ^7.0.0
+  latlong2: ^0.9.1
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
@@ -26,3 +29,4 @@ flutter:
   assets:
     # Chỉ cần dòng này là nó tự nhận hết ảnh trong thư mục
     - assets/images/
+    - assets/icons/

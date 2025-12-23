@@ -6,6 +6,13 @@ import 'screens/onboarding/onboarding_screen.dart'; // <-- MỚI THÊM DÒNG NÀ
 import 'screens/auth/sign_up_screen.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/setup/setup_screen.dart';
+import 'screens/auth/sign_up_complete_screen.dart';
+import 'screens/auth/sign_in_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
+import 'screens/auth/otp_verification_screen.dart';
+import 'screens/auth/new_password_screen.dart';
+import 'screens/auth/reset_password_success_screen.dart';
+import 'screens/home/home_screen.dart';
 
 class AppRoutes {
   // Định nghĩa tên Routes
@@ -19,6 +26,10 @@ class AppRoutes {
   static const String forgotPassword = '/forgot-password';
   static const String home = '/home';
   static const String signUpSetup = '/setup';
+  static const String signUpComplete = '/sign-up-complete';
+  static const String otpVerification = '/otp-verification';
+  static const String resetPassword = '/reset-password';
+  static const String resetPasswordSuccess = '/reset-password-success';
 
   // Hàm điều hướng
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -38,24 +49,36 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => const WelcomeScreen());
 
       case signIn:
-        return MaterialPageRoute(
-          builder: (_) => const PlaceholderScreen(title: 'Sign In (Đăng nhập)'),
-        );
+        return MaterialPageRoute(builder: (_) => const SignInScreen());
 
+      // 2. Thêm case mới
+      case forgotPassword:
+        return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
+      // 2. Thêm case mới
+      case otpVerification:
+        return MaterialPageRoute(builder: (_) => const OtpVerificationScreen());
+
+      case resetPassword:
+        return MaterialPageRoute(builder: (_) => const NewPasswordScreen());
       case signUp:
         return MaterialPageRoute(builder: (_) => const SignUpScreen());
 
-      case signUpSetup: 
+      case signUpSetup:
         return MaterialPageRoute(builder: (_) => const SetupScreen());
+      case signUpComplete:
+        return MaterialPageRoute(builder: (_) => const SignUpCompleteScreen());
       case otp:
         return MaterialPageRoute(
           builder: (_) => PlaceholderScreen(title: 'Nhập OTP cho: $args'),
         );
 
-      case home:
+      case resetPasswordSuccess:
         return MaterialPageRoute(
-          builder: (_) => const PlaceholderScreen(title: 'Home Dashboard'),
+          builder: (_) => const ResetPasswordSuccessScreen(),
         );
+
+      case home:
+        return MaterialPageRoute(builder: (_) => const HomeScreen());
 
       default:
         return _errorRoute();

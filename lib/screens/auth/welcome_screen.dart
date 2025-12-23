@@ -55,7 +55,7 @@ class WelcomeScreen extends StatelessWidget {
                 ],
               ),
 
-              // --- PHẦN 2: CÁC NÚT MẠNG XÃ HỘI (Sử dụng Widget dùng chung) ---
+              // --- PHẦN 2: CÁC NÚT MẠNG XÃ HỘI ---
               Column(
                 children: [
                   // Google
@@ -98,7 +98,7 @@ class WelcomeScreen extends StatelessWidget {
               // --- PHẦN 3: NÚT SIGN UP / SIGN IN ---
               Column(
                 children: [
-                  // Nút Sign Up (Màu đậm)
+                  // Nút Sign Up (Màu đậm) -> Chuyển đến trang Đăng ký
                   SizedBox(
                     width: double.infinity,
                     height: 55,
@@ -122,12 +122,13 @@ class WelcomeScreen extends StatelessWidget {
                   
                   const SizedBox(height: 15),
 
-                  // Nút Sign In (Màu nhạt - Giống nút Skip trang trước)
+                  // Nút Sign In (Màu nhạt) -> Chuyển đến trang Đăng nhập
                   SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
                       onPressed: () {
+                        // CHỖ NÀY ĐÃ ĐƯỢC SỬA ĐỂ TRỎ ĐÚNG TRANG SIGN IN
                         Navigator.pushNamed(context, AppRoutes.signIn);
                       },
                       style: ElevatedButton.styleFrom(
