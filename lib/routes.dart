@@ -13,6 +13,7 @@ import 'screens/auth/otp_verification_screen.dart';
 import 'screens/auth/new_password_screen.dart';
 import 'screens/auth/reset_password_success_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/device/add_device_screen.dart';
 
 class AppRoutes {
   // Định nghĩa tên Routes
@@ -30,6 +31,7 @@ class AppRoutes {
   static const String otpVerification = '/otp-verification';
   static const String resetPassword = '/reset-password';
   static const String resetPasswordSuccess = '/reset-password-success';
+  static const String addDevice = '/add-device';
 
   // Hàm điều hướng
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -79,6 +81,9 @@ class AppRoutes {
 
       case home:
         return MaterialPageRoute(builder: (_) => const HomeScreen());
+
+      case addDevice: // <-- Thêm case này
+        return MaterialPageRoute(builder: (_) => const AddDeviceScreen());
 
       default:
         return _errorRoute();

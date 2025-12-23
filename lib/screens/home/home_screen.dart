@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart'; 
 import 'package:http/http.dart' as http;     
+import '../../routes.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -284,7 +285,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(width: 16),
           FloatingActionButton(
-            heroTag: "add", onPressed: () {},
+            heroTag: "add", onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.addDevice);
+            },
             backgroundColor: primaryColor, elevation: 4, shape: const CircleBorder(),
             child: const Icon(Icons.add, color: Colors.white, size: 32),
           ),
