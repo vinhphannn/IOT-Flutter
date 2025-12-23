@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart'; // Cần thêm: geolocator: ^10.1.0
-import 'package:http/http.dart' as http;     // Cần thêm: http: ^1.2.0
+import 'package:geolocator/geolocator.dart'; 
+import 'package:http/http.dart' as http;     
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,35 +25,56 @@ class _HomeScreenState extends State<HomeScreen> {
   String _windSpeed = "-"; 
   String _weatherIconCode = "02d"; 
 
-// Key mới chồng vừa kiếm cho vợ nè, thử ngay nhé!
-  // Nếu key này cũng lỗi, vợ vào openweathermap.org đăng ký cái acc free 1 phút là có key riêng xài vĩnh viễn nha.
-  final String _apiKey = "27a0555627250630d7085732f9757659";
+  // API Key (Dùng key của vợ mới tạo)
+  final String _apiKey = "9d7d651e4671cadec782b9a990c7d992"; 
 
   @override
   void initState() {
     super.initState();
+    // Gọi hàm kiểm tra quyền ngay khi mở màn hình
     _checkLocationPermission();
   }
 
-  // --- 3. LOGIC KIỂM TRA QUYỀN ---
- // --- 5. HÀM GỌI API THỜI TIẾT (CÓ CHẾ ĐỘ DEMO KHI LỖI) ---
+  // --- 3. LOGIC KIỂM TRA QUYỀN (Đã sửa lỗi undefined_method) ---
+  Future<void> _checkLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    debugPrint("🔵 [DEBUG] Bắt đầu kiểm tra quyền vị trí...");
+
+    // 1. Check GPS
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() { _cityName = "GPS Off"; _isLoadingWeather = false; });
+      return;
+    }
+
+    // 2. Check Quyền
+    permission = await Geolocator.checkPermission();
+    
+    if (permission == LocationPermission.denied) {
+      if (mounted) _showLocationDialog(); // Hiện Popup xin quyền
+    } else if (permission == LocationPermission.deniedForever) {
+      setState(() { _cityName = "Blocked"; _isLoadingWeather = false; });
+    } else {
+      _fetchWeatherData(); // Đã có quyền -> Lấy thời tiết
+    }
+  }
+
+  // --- 4. HÀM GỌI API THỜI TIẾT (Đã sửa lỗi duplicate_definition - Chỉ giữ 1 hàm duy nhất) ---
   Future<void> _fetchWeatherData() async {
     setState(() => _isLoadingWeather = true);
     try {
       debugPrint("🚀 [DEBUG] Đang lấy tọa độ GPS...");
-      
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
-      debugPrint("📍 [DEBUG] Tọa độ tìm thấy: Lat=${position.latitude}, Lon=${position.longitude}");
       
       final url = Uri.parse(
         'https://api.openweathermap.org/data/2.5/weather?lat=${position.latitude}&lon=${position.longitude}&units=metric&appid=$_apiKey'
       );
 
-      debugPrint("🌐 [DEBUG] Đang gọi API...");
-
+      debugPrint("🌐 [DEBUG] Đang gọi API: $url");
       final response = await http.get(url);
-      debugPrint("📩 [DEBUG] API phản hồi Code: ${response.statusCode}");
-
+      
       if (response.statusCode == 200) {
         // --- TRƯỜNG HỢP 1: API NGON LÀNH ---
         final data = json.decode(response.body);
@@ -69,23 +90,23 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       } else {
-        // --- TRƯỜNG HỢP 2: LỖI KEY (401) HOẶC LỖI KHÁC -> DÙNG DỮ LIỆU GIẢ ---
+        // --- TRƯỜNG HỢP 2: LỖI API/KEY -> DÙNG DATA GIẢ (DEMO) ---
         debugPrint("⚠️ [DEBUG] Lỗi API (Code ${response.statusCode}). Chuyển sang chế độ DEMO.");
         if (mounted) {
           setState(() {
-            _temp = "28"; // Giả lập 28 độ
-            _cityName = "Go Vap, VN"; // Giả lập vị trí
+            _temp = "28"; 
+            _cityName = "Go Vap, VN"; 
             _weatherDesc = "Clouds";
             _humidity = "75";
             _windSpeed = "3.5";
-            _weatherIconCode = "02d"; // Icon mây
-            _isLoadingWeather = false; // Tắt loading để hiện giao diện
+            _weatherIconCode = "02d"; 
+            _isLoadingWeather = false; 
           });
         }
       }
     } catch (e) {
-      // --- TRƯỜNG HỢP 3: LỖI MẠNG/GPS -> DÙNG DỮ LIỆU GIẢ ---
-      debugPrint("🔥 [DEBUG] LỖI CRITICAL: $e. Chuyển sang chế độ DEMO.");
+      // --- TRƯỜNG HỢP 3: LỖI KHÁC -> DÙNG DATA GIẢ (DEMO) ---
+      debugPrint("🔥 [DEBUG] Lỗi Critical: $e. Chuyển sang chế độ DEMO.");
       if (mounted) {
         setState(() {
           _temp = "30";
@@ -99,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- 4. POPUP CUSTOM ---
+  // --- 5. POPUP CUSTOM ---
   void _showLocationDialog() {
     showDialog(
       context: context,
@@ -135,9 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ElevatedButton(
                   onPressed: () async {
                     Navigator.pop(context);
-                    debugPrint("🟡 [DEBUG] Người dùng nhấn Enable Location, đang xin quyền hệ thống...");
                     LocationPermission permission = await Geolocator.requestPermission();
-                    debugPrint("🔵 [DEBUG] Kết quả xin quyền: $permission");
                     if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
                       _fetchWeatherData();
                     } else {
@@ -177,50 +196,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- 5. GỌI API THỜI TIẾT (CÓ LOG CHI TIẾT) ---
-  Future<void> _fetchWeatherData() async {
-    setState(() => _isLoadingWeather = true);
-    try {
-      debugPrint("🚀 [DEBUG] Đang lấy tọa độ GPS...");
-      
-      // Lấy tọa độ
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
-      debugPrint("📍 [DEBUG] Tọa độ tìm thấy: Lat=${position.latitude}, Lon=${position.longitude}");
-      
-      final url = Uri.parse(
-        'https://api.openweathermap.org/data/2.5/weather?lat=${position.latitude}&lon=${position.longitude}&units=metric&appid=$_apiKey'
-      );
-
-      debugPrint("🌐 [DEBUG] Đang gọi API: $url");
-
-      final response = await http.get(url);
-      debugPrint("📩 [DEBUG] API phản hồi Code: ${response.statusCode}");
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        debugPrint("✅ [DEBUG] Dữ liệu thời tiết: ${data['weather'][0]['main']} tại ${data['name']}");
-        
-        if (mounted) {
-          setState(() {
-            _temp = data['main']['temp'].round().toString();
-            _cityName = data['name'];
-            _weatherDesc = data['weather'][0]['main'];
-            _humidity = data['main']['humidity'].toString();
-            _windSpeed = data['wind']['speed'].toString();
-            _weatherIconCode = data['weather'][0]['icon'];
-            _isLoadingWeather = false;
-          });
-        }
-      } else {
-        debugPrint("❌ [DEBUG] Lỗi API Body: ${response.body}");
-        setState(() { _cityName = "Error API"; _isLoadingWeather = false; });
-      }
-    } catch (e) {
-      debugPrint("🔥 [DEBUG] LỖI CRITICAL: $e");
-      if (mounted) setState(() { _isLoadingWeather = false; });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -246,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              
               SizedBox(
                 height: 40,
                 child: ListView.separated(
@@ -317,6 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- WIDGETS CON ---
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
