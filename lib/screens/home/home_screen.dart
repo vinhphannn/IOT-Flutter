@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart'; 
 import 'package:http/http.dart' as http;     
 import '../../routes.dart';
+import '../../services/room_service.dart'; // Import Service
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,9 +14,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // --- 1. BIẾN UI ---
-  int _selectedIndex = 0;
+  // (Đã xóa _selectedIndex vì không dùng nữa)
   int _selectedRoomIndex = 0;
-  final List<String> _rooms = ["All Rooms", "Living Room", "Bedroom", "Kitchen", "Garage"];
+  
+  // Mặc định lúc đầu chỉ có "All Rooms"
+  List<String> _rooms = ["All Rooms"]; 
 
   // --- 2. BIẾN THỜI TIẾT ---
   bool _isLoadingWeather = true;
@@ -26,17 +29,34 @@ class _HomeScreenState extends State<HomeScreen> {
   String _windSpeed = "-"; 
   String _weatherIconCode = "02d"; 
 
-  // API Key (Dùng key của vợ mới tạo)
+  // API Key
   final String _apiKey = "9d7d651e4671cadec782b9a990c7d992"; 
 
   @override
   void initState() {
     super.initState();
-    // Gọi hàm kiểm tra quyền ngay khi mở màn hình
-    _checkLocationPermission();
+    _checkLocationPermission(); // Lấy thời tiết
+    _fetchRoomsData();          // Lấy danh sách phòng
   }
 
-  // --- 3. LOGIC KIỂM TRA QUYỀN (Đã sửa lỗi undefined_method) ---
+  // --- HÀM MỚI: LẤY DANH SÁCH PHÒNG TỪ BACKEND ---
+  Future<void> _fetchRoomsData() async {
+    try {
+      RoomService roomService = RoomService();
+      List<String> roomsFromDb = await roomService.fetchRooms();
+
+      if (mounted) {
+        setState(() {
+          // Giữ lại "All Rooms" ở đầu, nối thêm danh sách từ DB vào
+          _rooms = ["All Rooms", ...roomsFromDb];
+        });
+      }
+    } catch (e) {
+      debugPrint("Lỗi lấy phòng: $e");
+    }
+  }
+
+  // --- 3. LOGIC KIỂM TRA QUYỀN ---
   Future<void> _checkLocationPermission() async {
     bool serviceEnabled;
     LocationPermission permission;
@@ -54,15 +74,15 @@ class _HomeScreenState extends State<HomeScreen> {
     permission = await Geolocator.checkPermission();
     
     if (permission == LocationPermission.denied) {
-      if (mounted) _showLocationDialog(); // Hiện Popup xin quyền
+      if (mounted) _showLocationDialog(); 
     } else if (permission == LocationPermission.deniedForever) {
       setState(() { _cityName = "Blocked"; _isLoadingWeather = false; });
     } else {
-      _fetchWeatherData(); // Đã có quyền -> Lấy thời tiết
+      _fetchWeatherData(); 
     }
   }
 
-  // --- 4. HÀM GỌI API THỜI TIẾT (Đã sửa lỗi duplicate_definition - Chỉ giữ 1 hàm duy nhất) ---
+  // --- 4. HÀM GỌI API THỜI TIẾT ---
   Future<void> _fetchWeatherData() async {
     setState(() => _isLoadingWeather = true);
     try {
@@ -77,7 +97,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final response = await http.get(url);
       
       if (response.statusCode == 200) {
-        // --- TRƯỜNG HỢP 1: API NGON LÀNH ---
         final data = json.decode(response.body);
         if (mounted) {
           setState(() {
@@ -91,8 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       } else {
-        // --- TRƯỜNG HỢP 2: LỖI API/KEY -> DÙNG DATA GIẢ (DEMO) ---
-        debugPrint("⚠️ [DEBUG] Lỗi API (Code ${response.statusCode}). Chuyển sang chế độ DEMO.");
+        // Fallback Demo Mode
         if (mounted) {
           setState(() {
             _temp = "28"; 
@@ -106,8 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      // --- TRƯỜNG HỢP 3: LỖI KHÁC -> DÙNG DATA GIẢ (DEMO) ---
-      debugPrint("🔥 [DEBUG] Lỗi Critical: $e. Chuyển sang chế độ DEMO.");
+      // Fallback Demo Mode
       if (mounted) {
         setState(() {
           _temp = "30";
@@ -203,6 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
+      // SafeArea giữ lại để nội dung không bị tai thỏ che mất
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -223,6 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
               
+              // LIST ROOM NGANG (Sẽ tự động cập nhật khi load xong Service)
               SizedBox(
                 height: 40,
                 child: ListView.separated(
@@ -260,39 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: primaryColor,
-        unselectedItemColor: Colors.grey[400],
-        showUnselectedLabels: true,
-        selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.check_circle_outline), label: "Smart"),
-          BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: "Reports"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Account"),
-        ],
-      ),
-      floatingActionButton: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton(
-            heroTag: "mic", onPressed: () {},
-            backgroundColor: Colors.blue[50], mini: true, elevation: 2,
-            child: Icon(Icons.mic, color: primaryColor),
-          ),
-          const SizedBox(width: 16),
-          FloatingActionButton(
-            heroTag: "add", onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.addDevice);
-            },
-            backgroundColor: primaryColor, elevation: 4, shape: const CircleBorder(),
-            child: const Icon(Icons.add, color: Colors.white, size: 32),
-          ),
-        ],
-      ),
+      // --- ĐÃ XÓA BOTTOM NAV BAR VÀ FAB ---
     );
   }
 
@@ -428,10 +415,14 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 8),
           Text("You haven't added a device yet.", style: TextStyle(color: Colors.grey[500], fontSize: 16)),
           const SizedBox(height: 24),
+          // Nếu vợ muốn giữ nút Add ở đây (trong nội dung) thì để lại, còn không thì xóa luôn nhé.
+          // Chồng giữ lại vì nó nằm trong nội dung trang, không phải floating button.
           SizedBox(
             width: 180, height: 50,
             child: ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: () {
+                 Navigator.pushNamed(context, AppRoutes.addDevice);
+              },
               icon: const Icon(Icons.add, color: Colors.white),
               label: const Text("Add Device", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(

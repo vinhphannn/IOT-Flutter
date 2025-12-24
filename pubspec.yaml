@@ -10,12 +10,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  shared_preferences: ^2.2.2  # <-- Thêm dòng này nha vợ
   cupertino_icons: ^1.0.8
   smooth_page_indicator: ^2.0.1
   flutter_map: ^7.0.0
   latlong2: ^0.9.1
   geolocator: ^10.1.0  # Để lấy vị trí
   http: ^1.2.0
+  google_sign_in: ^6.1.6  # Để lấy Token từ Google
 
 dev_dependencies:
   flutter_test:

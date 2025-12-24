@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 1. Import thư viện này
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../../routes.dart';
 
-// --- 1. SỬA CLIPPER: Tạo đường cong lõm xuống (Smile Curve) ---
+// --- SMILE CLIPPER (Giữ nguyên của vợ) ---
 class SmileClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
@@ -60,6 +61,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
   ];
 
+  // --- 2. HÀM LƯU TRẠNG THÁI & CHUYỂN TRANG ---
+  void _completeOnboarding() async {
+    // Gọi instance của SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    // Lưu lại cờ 'seenOnboarding' là true
+    await prefs.setBool('seenOnboarding', true);
+
+    if (mounted) {
+      // Chuyển sang màn hình tiếp theo
+      Navigator.pushReplacementNamed(context, AppRoutes.loginOptions); // Hoặc welcome
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -71,7 +85,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: Stack(
         alignment: Alignment.bottomCenter,
         children: [
-          // --- PHẦN 1: ẢNH TRƯỢT DỌC (NẰM DƯỚI) ---
+          // --- PHẦN 1: ẢNH TRƯỢT DỌC ---
           PageView.builder(
             controller: _controller,
             itemCount: _contents.length,
@@ -97,7 +111,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             },
           ),
 
-          // --- PHẦN 2: KHUNG TRẮNG BO LÕM ---
+          // --- PHẦN 2: KHUNG TRẮNG ---
           ClipPath(
             clipper: SmileClipper(),
             child: Container(
@@ -150,7 +164,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
 
-                  // B. DẤU CHẤM (DOTS) - NGANG
+                  // B. DẤU CHẤM (DOTS)
                   SmoothPageIndicator(
                     controller: _controller,
                     count: _contents.length,
@@ -169,18 +183,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                   // C. HÀNG NÚT BẤM
                   isLastPage
-                      // --- NÚT "LET'S GET STARTED" (Ở TRANG CUỐI) ---
+                      // --- NÚT "LET'S GET STARTED" ---
                       ? SizedBox(
                           width: double.infinity,
                           height: 55,
                           child: ElevatedButton(
-                            onPressed: () {
-                              // Chuyển sang trang Welcome/Login Options
-                              Navigator.pushReplacementNamed(
-                                context,
-                                AppRoutes.loginOptions,
-                              );
-                            },
+                            // 3. Gọi hàm hoàn tất ở đây
+                            onPressed: _completeOnboarding, 
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryColor,
                               shape: RoundedRectangleBorder(
@@ -197,7 +206,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ),
                           ),
                         )
-                      // --- NÚT SKIP & CONTINUE (Ở CÁC TRANG KHÁC) ---
+                      // --- NÚT SKIP & CONTINUE ---
                       : Row(
                           children: [
                             // Nút Skip
@@ -205,10 +214,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               child: SizedBox(
                                 height: 55,
                                 child: ElevatedButton(
-                                  onPressed: () {
-                                    // Nhảy cóc đến trang cuối
-                                    _controller.jumpToPage(_contents.length - 1);
-                                  },
+                                  // 4. Nếu Skip thì cũng coi như xong Onboarding
+                                  onPressed: _completeOnboarding, 
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: primaryColor.withOpacity(0.1),
                                     foregroundColor: primaryColor,
@@ -236,7 +243,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 height: 55,
                                 child: ElevatedButton(
                                   onPressed: () {
-                                    // *** ĐÃ SỬA LẠI: Trượt sang trang kế tiếp ***
                                     _controller.nextPage(
                                       duration: const Duration(milliseconds: 600),
                                       curve: Curves.easeInOutCubic,

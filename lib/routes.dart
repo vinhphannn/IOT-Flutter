@@ -16,6 +16,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/device/add_device_screen.dart';
 import 'screens/device/connect_device_screen.dart';
 import 'screens/device/connected_success_screen.dart';
+import 'screens/main_screen.dart';
 
 class AppRoutes {
   // Định nghĩa tên Routes
@@ -84,7 +85,7 @@ class AppRoutes {
         );
 
       case home:
-        return MaterialPageRoute(builder: (_) => const HomeScreen());
+        return MaterialPageRoute(builder: (_) => const MainScreen());
 
       case addDevice: // <-- Thêm case này
         return MaterialPageRoute(builder: (_) => const AddDeviceScreen());

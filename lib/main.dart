@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'routes.dart';// Import file routes vừa tạo
+import 'routes.dart';
 
-void main() {
-  // Đảm bảo Flutter binding đã khởi tạo trước khi làm việc khác
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Khoá màn hình dọc (App IoT thường dùng chiều dọc)
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
@@ -22,42 +20,29 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Smartify',
-      debugShowCheckedModeBanner: false, // Tắt chữ DEBUG ở góc phải
-
-      // Cấu hình Theme chung cho toàn App (giống thiết kế của bạn)
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        primaryColor: const Color.fromARGB(255, 1, 96, 197), // Màu xanh dương chủ đạo (dự kiến)
-        scaffoldBackgroundColor: Colors.white, // Nền trắng
-        
-        // Cấu hình AppBar mặc định
+        primaryColor: const Color.fromARGB(255, 1, 96, 197),
+        scaffoldBackgroundColor: Colors.white,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
           elevation: 0,
           iconTheme: IconThemeData(color: Colors.black),
-          titleTextStyle: TextStyle(
-            color: Colors.black, 
-            fontSize: 20, 
-            fontWeight: FontWeight.bold
-          ),
+          titleTextStyle: TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
         ),
-
-        // Cấu hình nút bấm (ElevatedButton) mặc định là màu xanh, bo tròn
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF4A90E2), // Màu nút
-            foregroundColor: Colors.white, // Màu chữ
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30), // Bo tròn như thiết kế
-            ),
+            backgroundColor: const Color(0xFF4A90E2),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
           ),
         ),
       ),
-
-      // --- CẤU HÌNH ROUTE ---
-      initialRoute: AppRoutes.splash, // Màn hình đầu tiên chạy lên
-      onGenerateRoute: AppRoutes.generateRoute, // Hàm xử lý điều hướng
+      // --- LUÔN BẮT ĐẦU TỪ SPLASH ---
+      initialRoute: AppRoutes.splash, 
+      onGenerateRoute: AppRoutes.generateRoute,
     );
   }
 }

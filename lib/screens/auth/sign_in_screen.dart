@@ -1,8 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui'; // Cần cho hiệu ứng Blur
-import '../../widgets/social_button.dart'; 
+import 'dart:ui'; 
+import '../../widgets/social_button.dart';
 import '../../routes.dart';
+import '../../services/auth_service.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -15,15 +16,15 @@ class _SignInScreenState extends State<SignInScreen> {
   // Trạng thái
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _rememberMe = false; // Thay đổi từ isChecked sang rememberMe
+  bool _rememberMe = false;
 
   // Controller
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
 
-  // Hàm xử lý Đăng nhập
+  // --- HÀM XỬ LÝ ĐĂNG NHẬP (NÃO BỘ) ---
   void _handleSignIn() async {
-    // 1. Validate cơ bản
+    // 1. Validate
     if (_emailController.text.isEmpty || _passController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -39,20 +40,46 @@ class _SignInScreenState extends State<SignInScreen> {
       _isLoading = true;
     });
 
-    // 3. Giả lập gọi API (2 giây thôi cho nhanh hơn đăng ký)
-    await Future.delayed(const Duration(seconds: 2));
+    // 3. GỌI API LOGIN
+    AuthService authService = AuthService();
+    // Lưu ý: Hàm login giờ trả về Map (chứa isSetup) hoặc null
+    Map<String, dynamic>? result = await authService.login(
+      _emailController.text,
+      _passController.text,
+    );
 
     if (mounted) {
       setState(() {
-        _isLoading = false;
+        _isLoading = false; // Tắt loading
       });
-      
-      // 4. Chuyển sang Dashboard (Home)
-      Navigator.pushNamedAndRemoveUntil(
-        context, 
-        AppRoutes.home, 
-        (route) => false // Xóa hết lịch sử quay lại
-      );
+
+      if (result != null) {
+        // --- 4. LOGIN THÀNH CÔNG -> KIỂM TRA SETUP ---
+        bool isSetup = result['isSetup'] ?? false; // Lấy cờ từ Backend
+
+        if (isSetup) {
+          // A. Đã có nhà -> Vào Dashboard
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Welcome back!"), backgroundColor: Colors.green),
+          );
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
+        } else {
+          // B. Chưa có nhà -> Sang trang Setup ngay
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Let's setup your smart home!"), backgroundColor: Colors.blue),
+          );
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
+        }
+
+      } else {
+        // 5. Thất bại -> Báo lỗi
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Login Failed! Please check your email or password."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -80,8 +107,8 @@ class _SignInScreenState extends State<SignInScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 10),
-                
-                // Tiêu đề: Welcome Back! 👋
+
+                // Tiêu đề
                 Row(
                   children: [
                     const Text(
@@ -89,7 +116,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(width: 8),
-                    const Text("👋", style: TextStyle(fontSize: 26)), // Icon vẫy tay
+                    const Text("👋", style: TextStyle(fontSize: 26)), 
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -97,7 +124,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   "Your Smart Home, Your Rules.",
                   style: TextStyle(color: Colors.grey[600], fontSize: 14),
                 ),
-                
+
                 const SizedBox(height: 30),
 
                 // Email Input
@@ -127,7 +154,6 @@ class _SignInScreenState extends State<SignInScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Checkbox Remember Me
                     Row(
                       children: [
                         SizedBox(
@@ -148,18 +174,14 @@ class _SignInScreenState extends State<SignInScreen> {
                       ],
                     ),
 
-                    // Forgot Password Link
                     TextButton(
                       onPressed: () {
-                        Navigator.pushNamed(context, AppRoutes.forgotPassword);
+                         Navigator.pushNamed(context, AppRoutes.forgotPassword);
                       },
                       style: TextButton.styleFrom(padding: EdgeInsets.zero),
                       child: Text(
                         "Forgot Password?",
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
                       ),
                     )
                   ],
@@ -174,10 +196,12 @@ class _SignInScreenState extends State<SignInScreen> {
                   label: "Continue with Google",
                   iconPath: "assets/icons/google.png",
                   fallbackIcon: Icons.g_mobiledata,
-                  onPressed: () {},
+                  onPressed: () async {
+                    // Logic Google Login cũng cần sửa tương tự để check setup
+                    // Tạm thời vợ cứ để Login thường chạy ngon trước đã nhé
+                  },
                 ),
                 const SizedBox(height: 15),
-                
                 SocialButton(
                   label: "Continue with Apple",
                   iconPath: "assets/icons/apple.png",
@@ -185,15 +209,13 @@ class _SignInScreenState extends State<SignInScreen> {
                   onPressed: () {},
                 ),
                 const SizedBox(height: 15),
-
-                // Thêm nút Facebook cho giống thiết kế
                 SocialButton(
                   label: "Continue with Facebook",
                   iconPath: "assets/icons/facebook.png",
                   fallbackIcon: Icons.facebook,
                   onPressed: () {},
                 ),
-                
+
                 const SizedBox(height: 40),
 
                 // Nút Sign In
@@ -201,13 +223,11 @@ class _SignInScreenState extends State<SignInScreen> {
                   width: double.infinity,
                   height: 55,
                   child: ElevatedButton(
-                    onPressed: _handleSignIn, 
+                    onPressed: _handleSignIn,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      elevation: 2, // Thêm chút bóng đổ
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      elevation: 2,
                     ),
                     child: const Text(
                       "Sign in",
@@ -222,49 +242,40 @@ class _SignInScreenState extends State<SignInScreen> {
           ),
         ),
 
-        // --- LỚP 2: LOADING OVERLAY (Tái sử dụng y chang) ---
+        // --- LỚP 2: LOADING OVERLAY ---
         if (_isLoading)
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
               child: Container(
-                color: Colors.black.withOpacity(0.75), 
+                color: Colors.black.withOpacity(0.75),
                 child: Center(
                   child: Container(
                     width: size.width * 0.8,
-                    padding: const EdgeInsets.symmetric(vertical: 70), 
+                    padding: const EdgeInsets.symmetric(vertical: 70),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2), 
-                          blurRadius: 15, 
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 15,
                           offset: const Offset(0, 5),
-                        )
-                      ]
+                        ),
+                      ],
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 60,
-                          height: 60,
-                          child: CircularProgressIndicator(
-                            color: primaryColor,
-                            strokeWidth: 5,
-                          ),
+                          width: 60, height: 60,
+                          child: CircularProgressIndicator(color: primaryColor, strokeWidth: 5),
                         ),
                         const SizedBox(height: 30),
                         const Text(
-                          "Sign in...", // Đổi text thành Sign in
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.none,
-                            color: Colors.black,
-                          ),
+                          "Sign in...",
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black, decoration: TextDecoration.none),
                         )
                       ],
                     ),
@@ -279,18 +290,10 @@ class _SignInScreenState extends State<SignInScreen> {
 
   // --- Helper Widgets ---
   Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-    );
+    return Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14));
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool isPassword = false,
-  }) {
+  Widget _buildTextField({required TextEditingController controller, required String hint, required IconData icon, bool isPassword = false}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[50],
@@ -310,10 +313,7 @@ class _SignInScreenState extends State<SignInScreen> {
           contentPadding: const EdgeInsets.symmetric(vertical: 16),
           suffixIcon: isPassword
               ? IconButton(
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                    color: Colors.grey[500],
-                  ),
+                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey[500]),
                   onPressed: () {
                     setState(() {
                       _obscurePassword = !_obscurePassword;

@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:ui'; // Cần cho hiệu ứng Blur
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import '../../routes.dart';
+import '../../services/auth_service.dart'; // <--- Import Service
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -17,8 +19,9 @@ class _SetupScreenState extends State<SetupScreen> {
   int _currentStep = 0;
   final int _totalSteps = 4;
   final PageController _pageController = PageController();
+  bool _isLoading = false; // <--- Biến loading
 
-  // Dữ liệu
+  // Dữ liệu User nhập
   String? _selectedCountry;
   final TextEditingController _homeNameController = TextEditingController();
   final List<String> _selectedRooms = [];
@@ -26,18 +29,14 @@ class _SetupScreenState extends State<SetupScreen> {
   // --- 2. BIẾN STEP 1 ---
   final TextEditingController _searchController = TextEditingController();
   final List<Map<String, String>> _countries = [
-    {'name': 'United States', 'flag': '🇺🇸'},
     {'name': 'Vietnam', 'flag': '🇻🇳'},
+    {'name': 'United States', 'flag': '🇺🇸'},
     {'name': 'United Kingdom', 'flag': '🇬🇧'},
     {'name': 'Japan', 'flag': '🇯🇵'},
     {'name': 'Germany', 'flag': '🇩🇪'},
     {'name': 'France', 'flag': '🇫🇷'},
     {'name': 'South Korea', 'flag': '🇰🇷'},
     {'name': 'China', 'flag': '🇨🇳'},
-    {'name': 'Italy', 'flag': '🇮🇹'},
-    {'name': 'Spain', 'flag': '🇪🇸'},
-    {'name': 'Canada', 'flag': '🇨🇦'},
-    {'name': 'Australia', 'flag': '🇦🇺'},
   ];
   List<Map<String, String>> _filteredCountries = [];
 
@@ -56,7 +55,7 @@ class _SetupScreenState extends State<SetupScreen> {
   // --- 4. BIẾN STEP 4 (MAP) ---
   final MapController _mapController = MapController();
   final TextEditingController _addressController = TextEditingController();
-  LatLng _currentCenter = const LatLng(10.7769, 106.7009); // Mặc định HCM
+  LatLng _currentCenter = const LatLng(10.7769, 106.7009);
   bool _isGettingAddress = false;
 
   @override
@@ -66,69 +65,64 @@ class _SetupScreenState extends State<SetupScreen> {
     _getAddressFromLatLng(_currentCenter);
   }
 
-  // --- API LẤY ĐỊA CHỈ ---
-  Future<void> _getAddressFromLatLng(LatLng point) async {
-    if (!mounted) return;
-    setState(() {
-      _isGettingAddress = true;
-    });
+  // --- LOGIC XỬ LÝ (QUAN TRỌNG) ---
 
-    try {
-      final url = Uri.parse(
-          'https://nominatim.openstreetmap.org/reverse?format=json&lat=${point.latitude}&lon=${point.longitude}&zoom=18&addressdetails=1');
-      
-      final response = await http.get(url, headers: {
-        'User-Agent': 'com.smartify.app/1.0' 
-      });
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final address = data['display_name']; 
-        
-        if (mounted) {
-          setState(() {
-            // Lấy ngắn gọn lại cho đẹp (tuỳ chỉnh nếu muốn full)
-            _addressController.text = address ?? "Unknown location";
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint("Error getting address: $e");
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isGettingAddress = false;
-        });
-      }
-    }
-  }
-
-  // Filter
-  void _runFilter(String enteredKeyword) {
-    List<Map<String, String>> results = [];
-    if (enteredKeyword.isEmpty) {
-      results = _countries;
-    } else {
-      results = _countries
-          .where((country) =>
-              country["name"]!.toLowerCase().contains(enteredKeyword.toLowerCase()))
-          .toList();
-    }
-    setState(() {
-      _filteredCountries = results;
-    });
-  }
-
-  // Nav
+  // 1. Hàm chuyển trang (Next)
   void _nextPage() {
+    // Validate từng bước
+    if (_currentStep == 0 && _selectedCountry == null) {
+      _showError("Please select a country");
+      return;
+    }
+    if (_currentStep == 1 && _homeNameController.text.trim().isEmpty) {
+      _showError("Please enter your home name");
+      return;
+    }
+    if (_currentStep == 2 && _selectedRooms.isEmpty) {
+      _showError("Please select at least one room");
+      return;
+    }
+
+    // Nếu chưa phải bước cuối -> Qua trang tiếp
     if (_currentStep < _totalSteps - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.pushReplacementNamed(context, AppRoutes.signUpComplete);
+      // Nếu là bước cuối -> GỌI API SETUP
+      _submitSetup();
     }
+  }
+
+  // 2. Hàm Gửi dữ liệu về Backend
+  void _submitSetup() async {
+    setState(() => _isLoading = true); // Bật loading
+
+    AuthService authService = AuthService();
+    bool success = await authService.setupProfile(
+      nationality: _selectedCountry ?? "Vietnam",
+      houseName: _homeNameController.text,
+      address: _addressController.text,
+      roomNames: _selectedRooms,
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false); // Tắt loading
+
+      if (success) {
+        // Thành công -> Chuyển sang màn hình Hoàn tất
+        Navigator.pushReplacementNamed(context, AppRoutes.signUpComplete);
+      } else {
+        _showError("Setup failed. Please try again.");
+      }
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   void _prevPage() {
@@ -138,8 +132,43 @@ class _SetupScreenState extends State<SetupScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.pop(context); 
+      Navigator.pop(context);
     }
+  }
+
+  // --- API MAP ---
+  Future<void> _getAddressFromLatLng(LatLng point) async {
+    if (!mounted) return;
+    setState(() => _isGettingAddress = true);
+    try {
+      final url = Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?format=json&lat=${point.latitude}&lon=${point.longitude}&zoom=18&addressdetails=1');
+      final response = await http.get(url, headers: {'User-Agent': 'com.smartify.app/1.0'});
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            _addressController.text = data['display_name'] ?? "Unknown location";
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error: $e");
+    } finally {
+      if (mounted) setState(() => _isGettingAddress = false);
+    }
+  }
+
+  void _runFilter(String enteredKeyword) {
+    setState(() {
+      if (enteredKeyword.isEmpty) {
+        _filteredCountries = _countries;
+      } else {
+        _filteredCountries = _countries
+            .where((country) => country["name"]!.toLowerCase().contains(enteredKeyword.toLowerCase()))
+            .toList();
+      }
+    });
   }
 
   @override
@@ -147,105 +176,143 @@ class _SetupScreenState extends State<SetupScreen> {
     final primaryColor = Theme.of(context).primaryColor;
     final size = MediaQuery.of(context).size;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: _prevPage,
-        ),
-        title: SizedBox(
-          height: 12, 
-          width: size.width * 0.65, 
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: LinearProgressIndicator(
-              value: (_currentStep + 1) / _totalSteps,
-              backgroundColor: Colors.grey[200], 
-              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-              minHeight: 12, 
+    return Stack(
+      children: [
+        // LỚP 1: GIAO DIỆN CHÍNH
+        Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black),
+              onPressed: _prevPage,
             ),
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: Center(
-              child: Text(
-                "${_currentStep + 1}/$_totalSteps",
-                style: const TextStyle(
-                    color: Colors.black, fontWeight: FontWeight.bold),
+            title: SizedBox(
+              height: 12,
+              width: size.width * 0.65,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: LinearProgressIndicator(
+                  value: (_currentStep + 1) / _totalSteps,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                  minHeight: 12,
+                ),
               ),
             ),
-          )
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              onPageChanged: (index) {
-                setState(() {
-                  _currentStep = index;
-                });
-              },
-              children: [
-                _buildStep1Country(),
-                _buildStep2HomeName(),
-                _buildStep3AddRooms(),
-                _buildStep4Location(),
-              ],
+            centerTitle: true,
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Center(
+                  child: Text(
+                    "${_currentStep + 1}/$_totalSteps",
+                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              )
+            ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: (index) => setState(() => _currentStep = index),
+                  children: [
+                    _buildStep1Country(),
+                    _buildStep2HomeName(),
+                    _buildStep3AddRooms(),
+                    _buildStep4Location(),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  children: [
+                    // Nút Skip (Chỉ hiện nếu không bắt buộc - nhưng ở đây ta cứ để)
+                    Expanded(
+                      child: SizedBox(
+                        height: 55,
+                        child: ElevatedButton(
+                          onPressed: _nextPage, // Tạm thời Skip cũng là Next
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor.withOpacity(0.1),
+                            foregroundColor: primaryColor,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                          child: const Text("Skip", style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    // Nút Continue / Finish
+                    Expanded(
+                      child: SizedBox(
+                        height: 55,
+                        child: ElevatedButton(
+                          onPressed: _nextPage,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                          child: Text(
+                            _currentStep == _totalSteps - 1 ? "Finish" : "Continue",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            ],
+          ),
+        ),
+
+        // LỚP 2: LOADING OVERLAY
+        if (_isLoading)
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(30),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: primaryColor),
+                        const SizedBox(height: 20),
+                        const Text("Setting up your home...", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed: _nextPage,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor.withOpacity(0.1),
-                        foregroundColor: primaryColor,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      ),
-                      child: const Text("Skip", style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: SizedBox(
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed: _nextPage,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      ),
-                      child: const Text("Continue", style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
-        ],
-      ),
+      ],
     );
   }
 
-  // --- STEP 1 ---
+  // --- CÁC WIDGET BƯỚC 1, 2, 3, 4 (GIỮ NGUYÊN NHƯ CŨ) ---
+  // (Vợ copy lại phần _buildStep1Country, _buildStep2HomeName... từ code cũ vào đây nhé)
+  // Để cho gọn chồng không paste lại phần UI dài dòng đó, chỉ lưu ý là logic _nextPage ở trên đã xử lý hết rồi.
+
+  // ... (Paste các hàm UI vào đây)
+    // --- STEP 1 ---
   Widget _buildStep1Country() {
     final primaryColor = Theme.of(context).primaryColor;
     return Padding(
@@ -549,7 +616,7 @@ class _SetupScreenState extends State<SetupScreen> {
             text: "Set Home ",
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black, fontFamily: 'Inter'),
             children: [
-              TextSpan(text: "Location", style: TextStyle(color: Theme.of(context).primaryColor)),
+              TextSpan(text: title.replaceAll("Set Home ", ""), style: TextStyle(color: Theme.of(context).primaryColor)),
             ],
           ),
         ),
@@ -562,4 +629,5 @@ class _SetupScreenState extends State<SetupScreen> {
       ],
     );
   }
+
 }

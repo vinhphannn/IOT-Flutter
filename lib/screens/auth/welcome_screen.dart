@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/social_button.dart';
 import '../../routes.dart';
+import '../../services/auth_service.dart'; // Import file vừa tạo
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -59,11 +60,29 @@ class WelcomeScreen extends StatelessWidget {
               Column(
                 children: [
                   // Google
+               // Google
                   SocialButton(
                     label: "Continue with Google",
                     iconPath: "assets/icons/google.png",
                     fallbackIcon: Icons.g_mobiledata,
-                    onPressed: () => print("Google Welcome"),
+                    onPressed: () async {
+                      // Gọi bộ não hoạt động
+                      AuthService authService = AuthService();
+                      bool success = await authService.signInWithGoogle();
+
+                      if (success) {
+                        // Nếu thành công -> Chuyển sang trang Dashboard/Home
+                        // Navigator.pushReplacementNamed(context, AppRoutes.home);
+                        print("Chuyển màn hình đi vợ ơi!");
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Đăng nhập thành công!")),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Đăng nhập thất bại!")),
+                        );
+                      }
+                    },
                   ),
                   const SizedBox(height: 15),
                   

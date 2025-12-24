@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // Cần import này cho hiệu ứng Blur
 import '../../widgets/social_button.dart'; 
 import '../../routes.dart';
+import '../../services/auth_service.dart'; // <--- Import cái này
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -19,49 +20,62 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
 
-  void _handleSignUp() async {
-    // 1. VALIDATE
+void _handleSignUp() async {
+    // 1. VALIDATE (Giữ nguyên như cũ)
     if (!_isChecked) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please agree to Terms & Conditions first!"),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text("Please agree to Terms & Conditions first!"), backgroundColor: Colors.red),
       );
       return;
     }
 
     if (_emailController.text.isEmpty || _passController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter Email and Password."),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text("Please enter Email and Password."), backgroundColor: Colors.red),
       );
       return;
     }
 
-    // 2. LOGIC
+    // 2. LOGIC GỌI API
     setState(() {
       _isLoading = true; // Bật loading
     });
 
-    // Giả lập gọi API 3 giây
-    await Future.delayed(const Duration(seconds: 3));
+    // --- ĐOẠN NÀY LÀ CỐT LÕI MỚI ---
+    AuthService authService = AuthService();
+    bool success = await authService.register(
+      _emailController.text, 
+      _passController.text
+    );
+    // -------------------------------
 
     if (mounted) {
       setState(() {
         _isLoading = false; // Tắt loading
       });
-      
-      // // Demo thông báo thành công
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   const SnackBar(
-      //     content: Text("Đăng ký thành công! Vui lòng kiểm tra email."),
-      //     backgroundColor: Colors.green,
-      //   ),
-      // );
-      Navigator.pushReplacementNamed(context, AppRoutes.signUpSetup);
+
+      if (success) {
+        // Đăng ký thành công -> Thông báo và chuyển sang trang Đăng nhập
+        // (Lưu ý: Đăng ký xong thường phải đăng nhập lại để lấy Token)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Đăng ký thành công! Hãy đăng nhập."),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Chuyển hướng về trang Sign In thay vì Setup
+        // Vì Setup cần Token, mà Đăng ký xong chưa có Token ngay.
+        Navigator.pushReplacementNamed(context, AppRoutes.signIn);
+      } else {
+        // Đăng ký thất bại (VD: Trùng email)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Đăng ký thất bại! Email có thể đã tồn tại."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
