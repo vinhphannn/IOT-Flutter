@@ -35,7 +35,6 @@ class _SplashScreenState extends State<SplashScreen> {
           barrierDismissible: false,
           builder: (context) => ServerConfigDialog(
             onSaved: () {
-              Navigator.pop(context); 
               _startAppFlow(); 
             },
           ),
