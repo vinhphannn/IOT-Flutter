@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; 
-import '../../routes.dart'; 
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../routes.dart';
+import '../../config/app_config.dart';       // Import Config
+import '../../services/api_client.dart';     // Import ApiClient
+import '../../widgets/server_config_dialog.dart'; // Import Dialog cấu hình IP
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,78 +16,88 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToNextScreen();
+    _startAppFlow(); // Bắt đầu luồng kiểm tra thông minh
   }
 
-  // --- PHẦN NÀY LÀ NÃO BỘ MỚI (Logic xịn) ---
-  _navigateToNextScreen() async {
-    // 1. Giữ nguyên thời gian chờ 3s theo thiết kế của vợ
-    await Future.delayed(const Duration(seconds: 3));
+  // --- 1. LOGIC KIỂM TRA KẾT NỐI (GIỮ NGUYÊN LOGIC XỊN) ---
+  void _startAppFlow() async {
+    // A. Load IP Server đã lưu trong máy (nếu có)
+    await AppConfig.loadBaseUrl();
 
-    // 2. Lấy dữ liệu từ bộ nhớ máy
+    // B. Thử "Ping" Server xem sống hay chết
+    bool isConnected = await ApiClient.checkConnection();
+
+    if (!isConnected) {
+      // C. Nếu không kết nối được -> Hiện Popup cho nhập IP
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => ServerConfigDialog(
+            onSaved: () {
+              Navigator.pop(context); 
+              _startAppFlow(); 
+            },
+          ),
+        );
+      }
+    } else {
+      // D. Nếu kết nối ngon lành -> Chạy tiếp logic kiểm tra đăng nhập
+      _checkLoginStatus();
+    }
+  }
+
+  // --- 2. LOGIC ĐIỀU HƯỚNG ---
+  void _checkLoginStatus() async {
+    await Future.delayed(const Duration(seconds: 2)); // Chờ tí cho hiện logo đẹp
+
     final prefs = await SharedPreferences.getInstance();
     
-    // Check 1: Đã xem Onboarding chưa?
     final bool seenOnboarding = prefs.getBool('seenOnboarding') ?? false;
-    
-    // Check 2: Đã đăng nhập chưa? (SỬA KEY THÀNH 'jwt_token' CHO KHỚP AUTH SERVICE)
-    final String? token = prefs.getString('jwt_token'); 
+    final String? token = prefs.getString('jwt_token');
     final bool isLoggedIn = token != null && token.isNotEmpty;
-
-    // Check 3: Đã Setup nhà chưa? (MỚI THÊM)
     final bool isSetupCompleted = prefs.getBool('is_setup_completed') ?? false;
 
     if (!mounted) return;
 
-    // 3. Điều hướng thông minh (Updated Logic)
     if (isLoggedIn) {
-      // --- TRƯỜNG HỢP 1: ĐÃ ĐĂNG NHẬP ---
       if (isSetupCompleted) {
-        // A. Đã có nhà -> Vào thẳng Home
-        print("User cũ: Vào thẳng Home");
         Navigator.pushReplacementNamed(context, AppRoutes.home);
       } else {
-        // B. Chưa có nhà -> Vào Setup
-        print("User mới: Vào Setup");
         Navigator.pushReplacementNamed(context, AppRoutes.signUpSetup);
       }
     } else {
-      // --- TRƯỜNG HỢP 2: CHƯA ĐĂNG NHẬP ---
       if (seenOnboarding) {
-        // C. Khách quen (đã xem intro) -> Vào Welcome/Login Options
         Navigator.pushReplacementNamed(context, AppRoutes.loginOptions);
       } else {
-        // D. Khách mới tinh -> Vào Onboarding
         Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
       }
     }
   }
-  // ------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    // --- PHẦN GIAO DIỆN GIỮ NGUYÊN 100% THEO THIẾT KẾ ---
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.of(context).size; // Lấy kích thước màn hình
 
     return Scaffold(
-      // Sử dụng màu xanh chủ đạo từ Theme
-      backgroundColor: Theme.of(context).primaryColor, 
+      backgroundColor: Theme.of(context).primaryColor,
       body: SizedBox(
         width: double.infinity,
         child: Column(
           children: [
-            // Phần 1: Logo và Tên App (Căn giữa màn hình)
+            // Phần Logo
             Expanded(
-              flex: 3, 
+              flex: 3,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo
+                  // --- KHÔI PHỤC LOGO ẢNH CŨ CỦA VỢ ---
                   Image.asset(
                     'assets/images/logo.png',
                     width: size.width * 0.25, 
                     height: size.width * 0.25,
                     fit: BoxFit.contain,
+                    // Giữ cái này để lỡ ảnh lỗi thì nó hiện icon thay thế (dự phòng thôi)
                     errorBuilder: (context, error, stackTrace) => Container(
                       padding: const EdgeInsets.all(20),
                       decoration: const BoxDecoration(
@@ -94,32 +107,36 @@ class _SplashScreenState extends State<SplashScreen> {
                       child: Icon(Icons.smart_toy, size: 60, color: Theme.of(context).primaryColor),
                     ),
                   ),
+                  // -------------------------------------
+                  
                   const SizedBox(height: 20),
-                  // Tên App
                   const Text(
                     'Smartify',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      letterSpacing: 1.2, 
+                      letterSpacing: 1.2,
                     ),
+                  ),
+                  
+                  // Hiển thị IP nhỏ xíu bên dưới (Giữ lại để vợ biết đang kết nối đâu)
+                  const SizedBox(height: 10),
+                  Text(
+                    "Server: ${AppConfig.baseUrl}",
+                    style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
                   ),
                 ],
               ),
             ),
-
-            // Phần 2: Loading (Nằm ở phía dưới)
+            // Phần Loading
             const Expanded(
-              flex: 1, 
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    strokeWidth: 3, 
-                  ),
-                ],
+              flex: 1,
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  strokeWidth: 3,
+                ),
               ),
             ),
           ],

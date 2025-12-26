@@ -2,13 +2,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart'; // Import để lưu nhà đã chọn
+import 'package:shared_preferences/shared_preferences.dart';
 
+// --- IMPORTS CÁC FILE CỦA VỢ ---
 import '../../routes.dart';
 import '../../services/room_service.dart';
-import '../../services/house_service.dart'; // Import Service mới
+import '../../services/house_service.dart'; 
 import '../../models/device_model.dart';
-import '../../models/house_model.dart'; // Import Model mới
+import '../../models/house_model.dart';
 import '../../widgets/device_card.dart';
 import '../../widgets/summary_card.dart';
 import 'category_devices_screen.dart';
@@ -21,9 +22,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // --- 1. BIẾN DATA NHÀ & PHÒNG ---
+  // --- 1. BIẾN QUẢN LÝ NHÀ & PHÒNG ---
   List<House> _houses = [];
-  House? _currentHouse; // Nhà đang được chọn
+  House? _currentHouse; 
   bool _isLoadingHouse = true;
 
   int _selectedRoomIndex = 0;
@@ -40,23 +41,26 @@ class _HomeScreenState extends State<HomeScreen> {
   String _humidity = "-"; 
   String _windSpeed = "-"; 
   String _weatherIconCode = "02d";
-  final String _apiKey = "9d7d651e4671cadec782b9a990c7d992";
+  final String _apiKey = "9d7d651e4671cadec782b9a990c7d992"; // Key Free của vợ
 
   @override
   void initState() {
     super.initState();
     _checkLocationPermission();
-    _initHomeData(); // Hàm khởi tạo dữ liệu chính
+    _initHomeData(); // Bắt đầu tải dữ liệu
   }
 
-  // --- LOGIC KHỞI TẠO DỮ LIỆU ---
+  // --- LOGIC TỔNG: KHỞI TẠO DỮ LIỆU ---
   Future<void> _initHomeData() async {
     await _fetchHouses();
-    // Lọc thiết bị ban đầu (dùng demo data tạm thời)
-    _filterDevices(); 
+    _filterDevices(); // Lọc thiết bị lần đầu
   }
 
-  // --- A. LẤY DANH SÁCH NHÀ ---
+  // ==========================================
+  // PHẦN A: LOGIC GỌI API (QUAN TRỌNG)
+  // ==========================================
+
+  // 1. LẤY DANH SÁCH NHÀ
   Future<void> _fetchHouses() async {
     try {
       HouseService houseService = HouseService();
@@ -66,54 +70,67 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _houses = houses;
           if (_houses.isNotEmpty) {
-            // Mặc định chọn nhà đầu tiên (Sau này có thể lấy từ Cache SharedPreferences)
+            // Mặc định chọn nhà đầu tiên
             _currentHouse = _houses[0];
+            // Lưu lại ID nhà này để dùng cho các màn hình khác
+            _saveCurrentHouseId(_currentHouse!.id);
             _isLoadingHouse = false;
+          } else {
+             // Trường hợp User chưa có nhà nào (Hiếm khi xảy ra vì đã qua Setup)
+             _isLoadingHouse = false;
           }
         });
 
-        // Sau khi có nhà -> Lấy phòng của nhà đó ngay
+        // Có nhà rồi thì đi lấy Phòng của nhà đó
         if (_currentHouse != null) {
           await _fetchRoomsForHouse(_currentHouse!.id);
         }
       }
     } catch (e) {
+      // --- XỬ LÝ LỖI 401 (AUTO LOGOUT) ---
+      if (e.toString().contains("UNAUTHORIZED")) {
+        debugPrint("Token hết hạn hoặc User bị xóa. Đăng xuất...");
+        if (mounted) {
+           // Đá về màn hình Login Options và xóa sạch lịch sử điều hướng
+           Navigator.pushNamedAndRemoveUntil(context, AppRoutes.loginOptions, (route) => false);
+        }
+        return;
+      }
+      
       debugPrint("Lỗi lấy danh sách nhà: $e");
       if (mounted) setState(() => _isLoadingHouse = false);
     }
   }
 
-  // --- B. LẤY PHÒNG THEO ID NHÀ ---
+  // 2. LẤY DANH SÁCH PHÒNG THEO ID NHÀ
   Future<void> _fetchRoomsForHouse(int houseId) async {
     try {
       RoomService roomService = RoomService();
-      // Gọi API lấy phòng theo ID nhà
       List<String> roomsFromDb = await roomService.fetchRoomNamesByHouse(houseId);
       
       if (mounted) {
         setState(() {
+          // Luôn giữ tab "All Rooms" ở đầu
           _rooms = ["All Rooms", ...roomsFromDb];
           _selectedRoomIndex = 0; // Reset về tab đầu tiên
         });
-        _filterDevices(); // Filter lại thiết bị theo phòng mới
+        _filterDevices(); // Filter lại thiết bị
       }
     } catch (e) {
       debugPrint("Lỗi lấy phòng: $e");
     }
   }
 
-  // --- C. XỬ LÝ KHI CHỌN NHÀ KHÁC ---
+  // 3. XỬ LÝ KHI NGƯỜI DÙNG ĐỔI NHÀ (DROPDOWN)
   void _onHouseSelected(House house) async {
-    if (_currentHouse?.id == house.id) return; // Nếu chọn lại nhà cũ thì thôi
+    if (_currentHouse?.id == house.id) return; // Chọn lại cái cũ thì bỏ qua
 
     setState(() {
       _currentHouse = house;
-      _isLoadingHouse = true; // Hiện loading nhẹ
+      _isLoadingHouse = true; // Hiện loading nhẹ ở header
     });
 
-    // Lưu ID nhà vào bộ nhớ để các màn hình khác (như Add Device) dùng
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('currentHouseId', house.id);
+    await _saveCurrentHouseId(house.id);
 
     // Load lại phòng của nhà mới
     await _fetchRoomsForHouse(house.id);
@@ -121,15 +138,23 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoadingHouse = false);
   }
 
-  // --- D. LOGIC LỌC THIẾT BỊ ---
+  Future<void> _saveCurrentHouseId(int id) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('currentHouseId', id);
+  }
+
+  // ==========================================
+  // PHẦN B: LOGIC UI & THỜI TIẾT
+  // ==========================================
+
+  // Lọc thiết bị hiển thị theo Tab Phòng
   void _filterDevices() {
-    // Tạm thời vẫn dùng Demo Data. 
-    // Sau này sẽ gọi API lấy thiết bị theo HouseID và RoomID
     setState(() {
       if (_selectedRoomIndex == 0) {
-        _homeDisplayDevices = demoDevices;
+        _homeDisplayDevices = demoDevices; // Hiện tất cả
       } else {
         String room = _rooms[_selectedRoomIndex];
+        // Lọc thiết bị có tên phòng trùng với tab đang chọn
         _homeDisplayDevices = demoDevices.where((d) => d.room == room).toList();
       }
     });
@@ -144,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- LOGIC THỜI TIẾT (Giữ nguyên) ---
+  // --- LOGIC THỜI TIẾT (OpenWeatherMap) ---
   Future<void> _checkLocationPermission() async {
     bool serviceEnabled;
     LocationPermission permission;
@@ -252,13 +277,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // -----------------------------------------------------------
+  // ==========================================
+  // PHẦN C: GIAO DIỆN CHÍNH (BUILD)
+  // ==========================================
 
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
 
-    // Đếm số lượng cho Summary Cards
+    // Đếm số lượng thiết bị (Dựa trên Demo Data)
     int lightCount = demoDevices.where((d) => d.type == 'Light').length;
     int cameraCount = demoDevices.where((d) => d.type == 'Camera').length;
     int electricalCount = demoDevices.where((d) => d.type == 'AC' || d.type == 'Router' || d.type == 'Speaker').length;
@@ -271,14 +298,17 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- HEADER ĐƯỢC NÂNG CẤP ---
+              // --- 1. HEADER (CHỌN NHÀ) ---
               _buildHeader(),
               
               const SizedBox(height: 24),
+              
+              // --- 2. THỜI TIẾT ---
               _buildWeatherCard(), 
+              
               const SizedBox(height: 24),
 
-              // --- SUMMARY CARDS ---
+              // --- 3. SUMMARY CARDS ---
               Row(
                 children: [
                   SummaryCard(
@@ -303,11 +333,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 24),
 
-              // --- HEADER DANH SÁCH ---
+              // --- 4. DANH SÁCH THIẾT BỊ ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("All Devices", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  // Nút Add Device
                   InkWell(
                     onTap: () => Navigator.pushNamed(context, AppRoutes.addDevice),
                     borderRadius: BorderRadius.circular(8),
@@ -326,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
 
-              // --- BỘ LỌC PHÒNG (Dữ liệu từ API) ---
+              // --- 5. BỘ LỌC PHÒNG (TAB NGANG) ---
               SizedBox(
                 height: 40,
                 child: ListView.separated(
@@ -335,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     final isSelected = _selectedRoomIndex == index;
-                    // Tạm tính số lượng giả
+                    // Đếm số lượng (Demo)
                     int count = index == 0 
                       ? demoDevices.length 
                       : demoDevices.where((d) => d.room == _rooms[index]).length;
@@ -370,7 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 20),
 
-              // --- GRID THIẾT BỊ ---
+              // --- 6. GRID HIỂN THỊ THIẾT BỊ ---
               _homeDisplayDevices.isEmpty
                   ? _buildEmptyState(primaryColor)
                   : GridView.builder(
@@ -397,15 +428,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- WIDGET HEADER MỚI (CÓ POPUP CHỌN NHÀ) ---
+  // --- WIDGET HEADER (DROPDOWN CHỌN NHÀ) ---
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Dropdown chọn nhà
+        // Dropdown Menu
         PopupMenuButton<House>(
           onSelected: _onHouseSelected,
-          offset: const Offset(0, 40), // Đẩy menu xuống dưới một chút
+          offset: const Offset(0, 40),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           itemBuilder: (BuildContext context) {
             return _houses.map((House house) {
@@ -434,7 +465,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             children: [
               Text(
-                _currentHouse?.name ?? "Loading...", // Hiển thị tên nhà đang chọn
+                _currentHouse?.name ?? "Loading...", 
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 8),
@@ -446,7 +477,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        // Icon bên phải
+        // Icon Chat & Notify
         Row(
           children: [
             GestureDetector(
@@ -477,9 +508,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
   
-  // ... (Các Widget Weather, EmptyState giữ nguyên như cũ) ...
+  // --- WIDGET THỜI TIẾT ---
   Widget _buildWeatherCard() {
-    // (Copy lại code cũ của vợ vào đây, chồng không paste lại để tiết kiệm dòng)
      return Container(
       width: double.infinity, height: 180, padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -544,6 +574,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- WIDGET TRỐNG (EMPTY STATE) ---
   Widget _buildEmptyState(Color primaryColor) {
      return Center(
       child: Column(

@@ -1,10 +1,30 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 class AppConfig {
-  // --- CHỌN 1 TRONG 2 DÒNG DƯỚI ĐÂY ĐỂ DÙNG ---
+  // Mặc định là máy ảo (cho lần đầu cài app)
+  static String baseUrl = "http://10.0.2.2:8080/api"; 
 
-  // 1. Nếu vợ chạy trên Máy ảo Android (Emulator):
-  static const String baseUrl = "http://10.0.2.2:8080/api"; 
+  // Key để lưu trong SharedPreferences
+  static const String _keyBaseUrl = 'saved_base_url';
 
-  // 2. Nếu vợ chạy trên Điện thoại thật (Cùng Wifi):
-  // Thay số 123 bằng IP thật của máy tính vợ (Mở cmd gõ ipconfig để xem IPv4)
-  // static const String baseUrl = "http://192.168.1.123:8080/api"; 
+  // 1. Hàm load URL từ bộ nhớ khi mở App
+  static Future<void> loadBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? savedUrl = prefs.getString(_keyBaseUrl);
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      baseUrl = savedUrl;
+    }
+  }
+
+  // 2. Hàm lưu URL mới khi vợ nhập
+  static Future<void> setBaseUrl(String newUrl) async {
+    // Đảm bảo không có dấu / ở cuối
+    if (newUrl.endsWith('/')) {
+      newUrl = newUrl.substring(0, newUrl.length - 1);
+    }
+    
+    baseUrl = newUrl;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyBaseUrl, baseUrl);
+  }
 }

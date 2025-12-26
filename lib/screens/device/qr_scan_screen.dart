@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import '../../routes.dart';
-// Import màn hình tiếp theo (Chọn Wifi) - Đảm bảo đường dẫn đúng
+// Import màn hình tiếp theo
 import 'wifi_selection_screen.dart'; 
 
 class QRScanScreen extends StatefulWidget {
@@ -26,19 +27,22 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
   late AnimationController _animationController;
   late Animation<double> _animation;
   bool _isFlashOn = false;
-  bool _isProcessing = false; // Biến cờ để tránh quét liên tục
+  bool _isProcessing = false; // Cờ để chặn quét nhiều lần liên tục
+
+  // UUID Service của ESP32 (Phải KHỚP 100% với code C++ trên ESP32)
+  final String _targetServiceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 
   @override
   void initState() {
     super.initState();
-    // 1. Setup Hiệu ứng dòng quét
+    // 1. Hiệu ứng dòng quét lên xuống
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
     _animation = Tween<double>(begin: 0.0, end: 1.0).animate(_animationController);
 
-    // 2. Check quyền Camera ngay khi mở màn hình
+    // 2. Check quyền Camera
     _checkCameraPermission();
   }
 
@@ -57,12 +61,12 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
     var status = await Permission.camera.status;
     if (status.isDenied) {
       if (await Permission.camera.request().isGranted) {
-        // Đã cấp quyền -> OK
+        // OK
       } else {
-        if (mounted) _showPermissionDialog("Camera", "App cần quyền Camera để quét mã QR thiết bị.");
+        if (mounted) _showPermissionDialog("Camera", "App cần quyền Camera để quét mã QR.");
       }
     } else if (status.isPermanentlyDenied) {
-      if (mounted) _showPermissionDialog("Camera", "Bạn đã tắt quyền Camera. Vui lòng vào Cài đặt để bật lại.");
+      if (mounted) _showPermissionDialog("Camera", "Quyền Camera bị tắt. Vui lòng bật lại trong Cài đặt.");
     }
   }
 
@@ -77,15 +81,15 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
           TextButton(
             child: const Text("Để sau", style: TextStyle(color: Colors.grey)),
             onPressed: () {
-              Navigator.pop(ctx); // Đóng Dialog
-              Navigator.pop(context); // Thoát màn hình Scan
+              Navigator.pop(ctx);
+              Navigator.pop(context); // Thoát màn hình
             },
           ),
           TextButton(
             child: const Text("Mở Cài Đặt", style: TextStyle(fontWeight: FontWeight.bold)),
             onPressed: () {
               Navigator.pop(ctx);
-              openAppSettings(); // Mở trang cài đặt điện thoại
+              openAppSettings();
             },
           ),
         ],
@@ -94,12 +98,11 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
   }
 
   // ==========================================
-  // PHẦN 2: LOGIC QUÉT VÀ KẾT NỐI
+  // PHẦN 2: LOGIC XỬ LÝ (SCAN & CONNECT)
   // ==========================================
 
-  // Hàm gọi khi Camera bắt được mã QR
   void _onDetect(BarcodeCapture capture) async {
-    if (_isProcessing) return; // Nếu đang xử lý thì chặn lại
+    if (_isProcessing) return; // Chặn nếu đang xử lý
 
     final List<Barcode> barcodes = capture.barcodes;
     for (final barcode in barcodes) {
@@ -108,7 +111,6 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
         _controller.stop(); // Tạm dừng Camera
         debugPrint('🔍 QR Found: ${barcode.rawValue}');
         
-        // Bắt đầu quy trình kết nối
         await _processQrData(barcode.rawValue!);
         break; 
       }
@@ -117,35 +119,30 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
 
   Future<void> _processQrData(String qrData) async {
     try {
-      // A. Parse JSON từ QR
-      // Mẫu JSON: {"id":"ESP_01", "name":"SmartHome_ESP32", "pop":"123"}
+      // 1. Parse JSON
+      // Mẫu JSON: {"mac":"...", "type":"LIGHT", "ble":"SmartHome_ESP32"}
       final Map<String, dynamic> data = jsonDecode(qrData);
-      String deviceName = data['name']; // Tên Bluetooth cần tìm
-      String deviceId = data['id'];
-      
-      // B. Xin quyền Bluetooth & Vị trí (Quan trọng cho Android 12+)
-      // Note: Android < 12 cần Location để scan BLE
+      // Lấy các thông tin cần thiết
+      String deviceType = data['type'] ?? "DEVICE";
+      String macAddress = data['mac'] ?? "";
+
+      // 2. Xin quyền Bluetooth
       Map<Permission, PermissionStatus> statuses = await [
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
-        Permission.location,
+        Permission.location, // Android < 12 cần location
       ].request();
 
-      bool isDenied = statuses.values.any((s) => s.isDenied);
-      bool isPermanent = statuses.values.any((s) => s.isPermanentlyDenied);
-
-      if (isDenied || isPermanent) {
+      bool isDenied = statuses.values.any((s) => s.isDenied || s.isPermanentlyDenied);
+      if (isDenied) {
          if (mounted) {
-            _showPermissionDialog(
-              "Bluetooth & Vị trí", 
-              "Để kết nối với thiết bị thông minh, App cần quyền Bluetooth và Vị trí."
-            );
-            setState(() => _isProcessing = false); // Reset để quét lại
+            _showPermissionDialog("Bluetooth", "Cần quyền Bluetooth để kết nối thiết bị.");
+            setState(() => _isProcessing = false);
          }
          return;
       }
 
-      // C. Hiện Dialog Loading
+      // 3. Hiện Dialog Loading
       if (!mounted) return;
       showDialog(
         context: context,
@@ -159,7 +156,8 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 20),
-                  Text("Đang tìm và kết nối thiết bị..."),
+                  Text("Đang tìm thiết bị..."),
+                  Text("(Vui lòng để điện thoại gần thiết bị)", style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
             ),
@@ -167,83 +165,75 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
         ),
       );
 
-      // D. Quét thiết bị BLE
+      // 4. Quét Bluetooth (Logic XỊN: Tìm theo UUID)
       BluetoothDevice? targetDevice;
       
-      // Bắt đầu scan (timeout 10 giây)
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      // Bắt đầu scan (Lọc theo UUID Service của ESP32)
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(seconds: 10),
+        withServices: [Guid(_targetServiceUuid)], // <--- CHÌA KHÓA QUAN TRỌNG
+      );
       
       var subscription = FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult r in results) {
-          // Ưu tiên lấy tên từ gói quảng cáo (Advertisement Data)
-          String foundName = r.advertisementData.localName.isNotEmpty 
-              ? r.advertisementData.localName 
-              : r.device.platformName;
-          
-          // Debug xem tìm thấy những gì
-          // debugPrint("Found BLE: $foundName");
-
-          if (foundName == deviceName) {
-            targetDevice = r.device;
-            FlutterBluePlus.stopScan(); // Tìm thấy rồi thì dừng scan ngay
-            break;
-          }
+          // Vì đã lọc bằng UUID nên cứ thấy là lụm thôi
+          targetDevice = r.device;
+          FlutterBluePlus.stopScan(); 
+          break;
         }
       });
 
-      // Đợi tối đa 5 giây để scan
-      await Future.delayed(const Duration(seconds: 5));
-      await FlutterBluePlus.stopScan();
+      // Chờ tối đa 6 giây
+      await Future.delayed(const Duration(seconds: 6));
+      if (FlutterBluePlus.isScanningNow) {
+        await FlutterBluePlus.stopScan();
+      }
       subscription.cancel();
 
-      // E. Kết nối
+      // 5. Kết nối
       if (targetDevice != null) {
-        debugPrint("⚡ Connecting to: ${targetDevice!.platformName}");
+        debugPrint("⚡ Found Device: ${targetDevice!.remoteId}");
+        
+        // Kết nối thử để đảm bảo sống
         await targetDevice!.connect();
         
         if (mounted) {
-          Navigator.pop(context); // Đóng dialog loading
+          Navigator.pop(context); // Đóng loading
           
-          // Chuyển sang màn hình chọn Wifi
+          // Chuyển sang màn hình chọn Wifi (File tiếp theo vợ sẽ làm)
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (context) => WifiSelectionScreen(
                 device: targetDevice!, 
-                deviceId: deviceId
+                deviceType: deviceType,
+                macAddress: macAddress,
               ),
             ),
           );
         }
       } else {
         if (mounted) {
-           Navigator.pop(context); // Đóng dialog loading
-           _showError("Không tìm thấy thiết bị '$deviceName'.\nHãy chắc chắn thiết bị đang bật và ở gần.");
+           Navigator.pop(context); // Đóng loading
+           _showError("Không tìm thấy thiết bị!\nHãy chắc chắn thiết bị đang ở chế độ cài đặt (Đèn xanh dương).");
         }
       }
 
     } catch (e) {
-      debugPrint("❌ Lỗi QR/BLE: $e");
+      debugPrint("❌ Lỗi: $e");
       if (mounted) {
-         // Đóng dialog loading nếu còn mở
-         if (Navigator.canPop(context)) Navigator.pop(context); 
-         _showError("Mã QR không hợp lệ hoặc lỗi kết nối!");
-      }
-    } finally {
-      // Nếu thất bại mà vẫn ở màn hình này, cho phép quét lại
-      if (mounted && _isProcessing) {
-        // Chỉ reset cờ xử lý nếu không chuyển trang
-        // (Logic chuyển trang đã xử lý ở trên)
+         if (Navigator.canPop(context)) Navigator.pop(context); // Đóng loading nếu có
+         _showError("Mã QR không hợp lệ hoặc lỗi Bluetooth.");
       }
     }
   }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red)
+      SnackBar(content: Text(msg), backgroundColor: Colors.red, duration: const Duration(seconds: 3))
     );
-    // Restart camera sau 2 giây để user đọc lỗi xong quét lại
-    Future.delayed(const Duration(seconds: 2), () {
+    // Restart camera sau 3 giây để user đọc lỗi xong
+    Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
         _controller.start();
         setState(() => _isProcessing = false);
@@ -252,7 +242,7 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
   }
 
   // ==========================================
-  // PHẦN 3: GIAO DIỆN (UI)
+  // PHẦN 3: GIAO DIỆN UI (ĐÃ CHUẨN ĐẸP)
   // ==========================================
 
   @override
@@ -269,12 +259,9 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
             onDetect: _onDetect,
           ),
 
-          // 2. Lớp phủ mờ xung quanh (Overlay)
+          // 2. Lớp phủ mờ (Overlay)
           ColorFiltered(
-            colorFilter: const ColorFilter.mode(
-              Colors.black54, 
-              BlendMode.srcOut, 
-            ),
+            colorFilter: const ColorFilter.mode(Colors.black54, BlendMode.srcOut),
             child: Stack(
               children: [
                 Container(
@@ -310,24 +297,19 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
                   _buildCorner(Align(alignment: Alignment.bottomLeft, child: _cornerWidget(270))),
                   _buildCorner(Align(alignment: Alignment.bottomRight, child: _cornerWidget(180))),
 
-                  // Thanh quét chạy lên xuống
+                  // Thanh quét chạy
                   AnimatedBuilder(
                     animation: _animation,
                     builder: (context, child) {
                       return Positioned(
                         top: _animation.value * (scanAreaSize - 20),
-                        left: 0,
-                        right: 0,
+                        left: 0, right: 0,
                         child: Container(
                           height: 2,
                           decoration: BoxDecoration(
-                            color: Colors.blueAccent, 
+                            color: Colors.blueAccent,
                             boxShadow: [
-                              BoxShadow(
-                                color: Colors.blueAccent.withOpacity(0.5),
-                                blurRadius: 10,
-                                spreadRadius: 2,
-                              )
+                              BoxShadow(color: Colors.blueAccent.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)
                             ],
                           ),
                         ),
@@ -339,11 +321,11 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
             ),
           ),
 
-          // 4. Các nút bấm và Text
+          // 4. Controls UI
           SafeArea(
             child: Column(
               children: [
-                // Header Bar
+                // Header
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   child: Row(
@@ -353,93 +335,41 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
                         icon: const Icon(Icons.close, color: Colors.white, size: 28),
                         onPressed: () => Navigator.pop(context),
                       ),
-                      const Text(
-                        "Scan Device",
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.more_vert, color: Colors.white, size: 28),
-                        onPressed: () {},
-                      ),
+                      const Text("Scan Device QR", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 48), // Placeholder để cân giữa
                     ],
                   ),
                 ),
-
                 const Spacer(),
-
-                // Text hướng dẫn
-                const Text(
-                  "Can't scan the QR code?",
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
+                const Text("Align QR code within the frame", style: TextStyle(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 16),
-
-                // Nút nhập tay
+                
+                // Nút nhập tay (Tùy chọn)
                 GestureDetector(
-                  onTap: () {
-                     // Logic nhập tay (Optional - Nếu vợ muốn làm thì thêm dialog nhập ID)
-                     Navigator.pop(context); 
-                  },
+                  onTap: () { /* Logic nhập tay sau này */ },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2), 
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
-                    child: const Text(
-                      "Enter setup code manually",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
+                    child: const Text("Enter setup code manually", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
-
                 const SizedBox(height: 40),
 
-                // Các nút điều khiển dưới cùng
+                // Flash Button
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      // Nút Flash
-                      IconButton(
-                        icon: Icon(
-                          _isFlashOn ? Icons.flash_on : Icons.flash_off, 
-                          color: Colors.white, size: 28
-                        ),
-                        onPressed: () {
-                          _controller.toggleTorch();
-                          setState(() => _isFlashOn = !_isFlashOn);
-                        },
-                      ),
-
-                      // Nút chụp ảnh (Trang trí)
-                      Container(
-                        width: 70, height: 70,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                          border: Border.all(color: Colors.grey.shade400, width: 4),
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white, 
-                          ),
-                        ),
-                      ),
-
-                      // Nút Thư viện ảnh (Trang trí - hoặc thêm tính năng chọn ảnh sau)
-                      IconButton(
-                        icon: const Icon(Icons.image, color: Colors.white, size: 28),
-                        onPressed: () {},
-                      ),
-                    ],
+                  padding: const EdgeInsets.only(bottom: 40),
+                  child: IconButton(
+                    icon: Icon(_isFlashOn ? Icons.flash_on : Icons.flash_off, color: Colors.white, size: 32),
+                    onPressed: () {
+                      _controller.toggleTorch();
+                      setState(() => _isFlashOn = !_isFlashOn);
+                    },
                   ),
                 ),
-                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -448,12 +378,11 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
     );
   }
 
-  // --- Widget vẽ góc vuông ---
   Widget _buildCorner(Widget child) => SizedBox(height: 40, width: 40, child: child);
 
   Widget _cornerWidget(int quarterTurns) {
     return RotatedBox(
-      quarterTurns: quarterTurns ~/ 90, 
+      quarterTurns: quarterTurns ~/ 90,
       child: Container(
         decoration: const BoxDecoration(
           border: Border(
