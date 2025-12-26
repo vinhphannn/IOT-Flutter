@@ -17,6 +17,13 @@ import 'screens/device/add_device_screen.dart';
 import 'screens/device/connect_device_screen.dart';
 import 'screens/device/connected_success_screen.dart';
 import 'screens/main_screen.dart';
+import 'screens/device/tabs/nearby_scan_tab.dart';
+import 'screens/device/qr_scan_screen.dart';
+import 'screens/notification/notification_screen.dart';
+import 'screens/chat/chat_screen.dart';
+import 'screens/voice/voice_assistant_screen.dart';
+import 'models/device_model.dart';
+import 'screens/control/device_control_screen.dart';
 
 class AppRoutes {
   // Định nghĩa tên Routes
@@ -37,6 +44,11 @@ class AppRoutes {
   static const String addDevice = '/add-device';
   static const String connectDevice = '/connect-device';
   static const String connectedSuccess = '/connected-success';
+  static const String scanQR = '/scan-qr';
+  static const String notification = '/notification';
+  static const String chat = '/chat';
+  static const String voiceAssistant = '/voice-assistant';
+  static const String controlDevice = '/control-device';
 
   // Hàm điều hướng
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -103,6 +115,22 @@ class AppRoutes {
           builder: (_) => ConnectedSuccessScreen(device: device),
         );
 
+      case scanQR: // <-- THÊM CASE NÀY
+        return MaterialPageRoute(builder: (_) => const QRScanScreen());
+
+      case notification:
+        return MaterialPageRoute(builder: (_) => const NotificationScreen());
+
+      case chat:
+        return MaterialPageRoute(builder: (_) => const ChatScreen());
+      case voiceAssistant:
+        return MaterialPageRoute(builder: (_) => const VoiceAssistantScreen());
+
+      case controlDevice:
+        final device = settings.arguments as Device;
+        return MaterialPageRoute(
+          builder: (_) => DeviceControlScreen(device: device),
+        );
       default:
         return _errorRoute();
     }

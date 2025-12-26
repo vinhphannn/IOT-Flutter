@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-// Import 4 trang con vào đây
+// Import 4 trang con
 import 'home/home_screen.dart';
-import 'profile/account_screen.dart'; 
+import 'profile/account_screen.dart';
+// Import routes để điều hướng
+import '../routes.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -16,9 +18,9 @@ class _MainScreenState extends State<MainScreen> {
   // Danh sách 4 màn hình
   final List<Widget> _pages = [
     const HomeScreen(), // Trang 0: Home
-    const Center(child: Text("Smart Page (Coming Soon)")), // Trang 1: Smart (Chưa làm thì để tạm Text)
-    const Center(child: Text("Reports Page (Coming Soon)")), // Trang 2: Reports
-    const AccountScreen(), // Trang 3: Account (Vừa tạo xong)
+    const Center(child: Text("Smart Page (Coming Soon)")), // Trang 1
+    const Center(child: Text("Reports Page (Coming Soon)")), // Trang 2
+    const AccountScreen(), // Trang 3: Account
   ];
 
   @override
@@ -29,7 +31,7 @@ class _MainScreenState extends State<MainScreen> {
       // Body sẽ thay đổi tùy theo _selectedIndex
       body: _pages[_selectedIndex],
 
-      // BottomNavigationBar dùng chung nằm ở đây
+      // BottomNavigationBar dùng chung
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -50,28 +52,50 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       
-      // Nút tròn ở giữa (Floating Button) chỉ hiện ở trang Home, hoặc hiện ở mọi trang tùy vợ
-      // Nếu muốn chỉ hiện ở Home thì bọc trong if:
+      // --- CẤU HÌNH NÚT NỔI (FAB) ---
+      // Chỉ hiện ở trang Home (index == 0)
       floatingActionButton: _selectedIndex == 0 
-        ? Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              FloatingActionButton(
-                heroTag: "mic", onPressed: () {},
-                backgroundColor: Colors.blue[50], mini: true, elevation: 2,
-                child: Icon(Icons.mic, color: primaryColor),
-              ),
-              const SizedBox(width: 16),
-              FloatingActionButton(
-                heroTag: "add", onPressed: () {
-                   Navigator.pushNamed(context, '/add-device'); // Nhớ check lại route name nha
-                },
-                backgroundColor: primaryColor, elevation: 4, shape: const CircleBorder(),
-                child: const Icon(Icons.add, color: Colors.white, size: 32),
-              ),
-            ],
+        ? Container(
+            // Thêm khoảng cách dưới đáy để nút không dính sát thanh điều hướng
+            margin: const EdgeInsets.only(bottom: 20), 
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // 1. NÚT MIC (VOICE ASSISTANT)
+                FloatingActionButton(
+                  heroTag: "btn_mic", // Tag riêng để tránh lỗi
+                  onPressed: () {
+                    // Chuyển sang trang Voice Assistant
+                    Navigator.pushNamed(context, AppRoutes.voiceAssistant);
+                  },
+                  backgroundColor: Colors.blue[50], 
+                  mini: true, 
+                  elevation: 2,
+                  shape: const CircleBorder(),
+                  child: Icon(Icons.mic, color: primaryColor),
+                ),
+                
+                const SizedBox(width: 16),
+                
+                // 2. NÚT ADD DEVICE
+                FloatingActionButton(
+                  heroTag: "btn_add", // Tag riêng
+                  onPressed: () {
+                     Navigator.pushNamed(context, AppRoutes.addDevice);
+                  },
+                  backgroundColor: primaryColor, 
+                  elevation: 4, 
+                  shape: const CircleBorder(),
+                  child: const Icon(Icons.add, color: Colors.white, size: 32),
+                ),
+              ],
+            ),
           ) 
         : null,
+      
+      // Định vị trí nút nổi ở góc dưới bên phải
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }

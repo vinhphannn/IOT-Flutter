@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../routes.dart';
 import 'add_device_screen.dart'; // Import để lấy class DeviceItem
-
+import 'tabs/nearby_scan_tab.dart';
 class ConnectedSuccessScreen extends StatelessWidget {
   final DeviceItem device;
 

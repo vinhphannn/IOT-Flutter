@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../routes.dart';
-import 'add_device_screen.dart'; // Để dùng DeviceItem và chuyển trang
+import '../../../routes.dart'; // Lùi 3 cấp để tìm routes.dart
+import 'nearby_scan_tab.dart'; // Import file này để lấy class DeviceItem
 
 class ManualAddTab extends StatefulWidget {
   const ManualAddTab({super.key});
@@ -14,12 +14,12 @@ class _ManualAddTabState extends State<ManualAddTab> {
   final List<String> _categories = ["Popular", "Lighting", "Camera", "Electrical", "Sensor", "Lock"];
   int _selectedCategoryIndex = 0;
 
-  // Danh sách thiết bị mẫu (Y như thiết kế)
+  // Danh sách thiết bị mẫu (Dùng class DeviceItem từ file nearby_scan_tab.dart)
   final List<DeviceItem> _devices = [
     DeviceItem(icon: Icons.camera_outdoor, name: "Smart V1 CCTV", color: Colors.grey),
     DeviceItem(icon: Icons.camera_indoor, name: "Smart Webcam", color: Colors.grey),
     DeviceItem(icon: Icons.video_camera_front, name: "Smart V2 CCTV", color: Colors.grey),
-    DeviceItem(icon: Icons.lightbulb, name: "Smart Lamp", color: Colors.orange), // Màu cam cho đèn
+    DeviceItem(icon: Icons.lightbulb, name: "Smart Lamp", color: Colors.orange), 
     DeviceItem(icon: Icons.speaker, name: "Smart Speaker", color: Colors.grey),
     DeviceItem(icon: Icons.router, name: "Wifi Router", color: Colors.grey),
   ];
@@ -30,6 +30,8 @@ class _ManualAddTabState extends State<ManualAddTab> {
 
     return Column(
       children: [
+        const SizedBox(height: 20),
+        
         // 1. CATEGORY FILTER (Scroll Ngang)
         SizedBox(
           height: 40,
@@ -42,7 +44,8 @@ class _ManualAddTabState extends State<ManualAddTab> {
               final isSelected = _selectedCategoryIndex == index;
               return GestureDetector(
                 onTap: () => setState(() => _selectedCategoryIndex = index),
-                child: Container(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected ? primaryColor : Colors.white,
@@ -68,14 +71,14 @@ class _ManualAddTabState extends State<ManualAddTab> {
         const SizedBox(height: 20),
 
         // 2. GRID VIEW THIẾT BỊ
-        Expanded( // Dùng Expanded để chiếm hết phần còn lại
+        Expanded( 
           child: GridView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2, // 2 cột
-              crossAxisSpacing: 16, // Khoảng cách ngang
-              mainAxisSpacing: 16, // Khoảng cách dọc
-              childAspectRatio: 0.85, // Tỷ lệ khung hình (Cao hơn rộng xíu)
+              crossAxisSpacing: 16, 
+              mainAxisSpacing: 16, 
+              childAspectRatio: 0.85, // Tỷ lệ khung hình
             ),
             itemCount: _devices.length,
             itemBuilder: (context, index) {
@@ -92,7 +95,7 @@ class _ManualAddTabState extends State<ManualAddTab> {
   Widget _buildDeviceCard(DeviceItem device, Color primaryColor) {
     return GestureDetector(
       onTap: () {
-        // Bấm vào thì cũng sang trang Connect giống bên Nearby
+        // Chuyển sang trang Connect Device
         Navigator.pushNamed(
           context, 
           AppRoutes.connectDevice, 
@@ -101,21 +104,28 @@ class _ManualAddTabState extends State<ManualAddTab> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey[50], // Nền xám rất nhạt
+          color: Colors.grey[50], 
           borderRadius: BorderRadius.circular(16),
-          // border: Border.all(color: Colors.grey.shade200), // Có thể thêm viền nếu thích
+          // Thêm bóng mờ nhẹ cho đẹp
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ]
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Hình ảnh thiết bị (Tạm dùng Icon to)
+            // Hình ảnh thiết bị 
             Container(
-              width: 100, height: 100,
+              width: 80, height: 80,
               decoration: const BoxDecoration(
-                // color: Colors.white, // Nếu muốn nền trắng cho icon
+                color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: Icon(device.icon, size: 60, color: device.color),
+              child: Icon(device.icon, size: 40, color: device.color),
             ),
             const SizedBox(height: 12),
             // Tên thiết bị

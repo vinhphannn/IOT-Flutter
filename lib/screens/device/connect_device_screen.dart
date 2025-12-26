@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'add_device_screen.dart'; // Import để lấy class DeviceItem
 import '../../routes.dart';
+// Import file này để lấy class DeviceItem (vì mình đã dời nó sang đây)
+import 'tabs/nearby_scan_tab.dart'; 
 
 class ConnectDeviceScreen extends StatefulWidget {
   final DeviceItem device; 
@@ -16,7 +17,7 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
   double _progress = 0.0; 
   Timer? _timer;
   
-  // Thêm biến để kiểm soát trạng thái
+  // Biến kiểm soát trạng thái
   bool _hasStarted = false; // Đã bấm nút Connect chưa?
   bool _isConnected = false; // Đã chạy xong 100% chưa?
 
@@ -27,8 +28,6 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
   }
 
   // Hàm bắt đầu chạy giả lập khi bấm nút
-// Trong _ConnectDeviceScreenState
-
   void _handleConnect() {
     setState(() {
       _hasStarted = true; 
@@ -46,10 +45,10 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
             timer.cancel();
             
             // --- TỰ ĐỘNG CHUYỂN TRANG LUÔN ---
-            // Đợi 1 xíu (300ms) cho người dùng kịp nhìn thấy số 100% rồi mới chuyển
+            // Đợi 300ms cho người dùng kịp nhìn thấy số 100%
             Future.delayed(const Duration(milliseconds: 300), () {
               if (mounted) {
-                Navigator.pushReplacementNamed( // Dùng replacement để không quay lại trang loading được
+                Navigator.pushReplacementNamed( 
                   context, 
                   AppRoutes.connectedSuccess, 
                   arguments: widget.device // Truyền thiết bị sang trang Success
@@ -61,6 +60,7 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
       }
     });
   }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -87,7 +87,7 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
           child: Column(
             children: [
-              // 1. Header Tab giả
+              // 1. Header Tab giả (Chỉ để hiển thị cho giống quy trình)
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -177,7 +177,6 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
-                          // Nếu chưa bắt đầu thì không cần bóng đổ xanh, chỉ bóng mờ
                           boxShadow: [
                             BoxShadow(
                               color: _hasStarted ? primaryColor.withOpacity(0.1) : Colors.grey.withOpacity(0.1), 
@@ -188,7 +187,7 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
                         ),
                         child: Icon(
                           widget.device.icon, 
-                          size: 100, // Icon to hơn xíu cho đẹp
+                          size: 100, 
                           color: _isConnected ? primaryColor : (_hasStarted ? primaryColor : Colors.grey[600])
                         ),
                       ),
@@ -199,7 +198,7 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
 
               SizedBox(height: size.height * 0.05),
 
-              // 4. TRẠNG THÁI & NÚT BẤM (Thay đổi theo biến _hasStarted và _isConnected)
+              // 4. TRẠNG THÁI & NÚT BẤM
               
               if (!_hasStarted) ...[
                 // --- TRẠNG THÁI 1: CHƯA KẾT NỐI ---
@@ -231,20 +230,16 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
                   "$percentage%",
                   style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: primaryColor),
                 ),
-                // Khi đang chạy thì ẩn nút đi (hoặc hiện nút Cancel nếu muốn)
+                // Ẩn nút khi đang chạy
                 const SizedBox(height: 55), 
               ] else ...[
-                // --- TRẠNG THÁI 3: HOÀN TẤT ---
-                const Text(
+                 // --- TRẠNG THÁI 3: KẾT NỐI XONG ---
+                 // (Không hiển thị nút Done nữa vì đã tự động chuyển trang)
+                 const Text(
                   "Connected Successfully!",
                   style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  
-                ),
+                const SizedBox(height: 55),
               ],
 
               const SizedBox(height: 20),

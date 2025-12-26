@@ -47,6 +47,8 @@ class _SignInScreenState extends State<SignInScreen> {
       _emailController.text,
       _passController.text,
     );
+//test xoa khi khong dung
+    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
 
     if (mounted) {
       setState(() {
