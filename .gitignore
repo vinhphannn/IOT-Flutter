@@ -45,5 +45,4 @@ app.*.map.json
 /android/app/release
 
 
-# iOS generated app icons
-ios/Runner/Assets.xcassets/AppIcon.appiconset/
+# iOS generated app ico
