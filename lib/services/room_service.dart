@@ -4,8 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class RoomService {
   // IP máy ảo Android là 10.0.2.2, máy thật thì thay bằng IP LAN
-  // static const String baseUrl = "http://10.0.2.2:8080/api"; 
-  static const String baseUrl = "http://172.20.10.12:8080/api";
+  static const String baseUrl = "http://10.0.2.2:8080/api"; 
+  // static const String baseUrl = "http://172.20.10.12:8080/api";
 
   Future<List<String>> fetchRooms() async {
     try {

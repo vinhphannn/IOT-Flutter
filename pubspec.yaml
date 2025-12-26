@@ -18,8 +18,8 @@ dependencies:
   latlong2: ^0.9.1
   geolocator: ^10.1.0  # Để lấy vị trí
   http: ^1.2.0
-  google_sign_in: ^6.1.6  # Để lấy Token từ Google
-  mobile_scanner: ^5.1.0 # Hoặc bản mới nhất
+  google_sign_in: 6.2.1  # Để lấy Token từ Google
+  mobile_scanner: 5.2.3 # Hoặc bản mới nhất
   flutter_blue_plus: ^1.34.5
   permission_handler: ^11.3.1
 

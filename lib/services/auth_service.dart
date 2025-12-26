@@ -11,8 +11,8 @@ class AuthService {
 
   // Địa chỉ Backend (Lưu ý: Android Emulator dùng 10.0.2.2 thay cho localhost)
   // Nếu chạy máy thật thì thay bằng IP LAN của máy tính (VD: 192.168.1.x)
-  // static const String baseUrl = "http://10.0.2.2:8080/api"; 
-  static const String baseUrl = "http://172.20.10.12:8080/api"; 
+  static const String baseUrl = "http://10.0.2.2:8080/api"; 
+  // static const String baseUrl = "http://172.20.10.12:8080/api"; 
 
   // Hàm xử lý đăng nhập Google
   Future<bool> signInWithGoogle() async {
