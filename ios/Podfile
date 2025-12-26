@@ -1,0 +1,35 @@
+# 1. Khai báo platform
+platform :ios, '12.0'
+
+# 2. Xóa bỏ warning không cần thiết
+_project_name = 'Runner'
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+end
+
+# 3. ĐOẠN QUAN TRỌNG NHẤT: BẬT QUYỀN (PERMISSION)
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      # Bật các quyền cần thiết lên
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+
+        ## Bật quyền Bluetooth (Cái vợ đang thiếu)
+        'PERMISSION_BLUETOOTH=1',
+
+        ## Bật quyền Camera
+        'PERMISSION_CAMERA=1',
+        
+        ## Bật quyền Location (Nếu cần)
+        'PERMISSION_LOCATION=1',
+      ]
+    end
+  end
+end
