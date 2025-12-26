@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>App cần Bluetooth để tìm và kết nối với thiết bị Smart Home.</string>
+
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>App cần Bluetooth để tìm và kết nối với thiết bị Smart Home.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to scan QR codes</string>
 	<key>REVERSED_CLIENT_ID</key>
