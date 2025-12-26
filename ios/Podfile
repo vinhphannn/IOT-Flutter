@@ -1,8 +1,34 @@
-# 1. Khai báo platform
+# ==========================================
+# 1. ĐOẠN CODE "TÌM ĐƯỜNG" (LÚC NÃY BỊ THIẾU)
+# ==========================================
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig and running flutter pub get"
+end
+
+require File.expand_path(File.join('flutter', 'ios', 'framework', 'Podfile'), flutter_root)
+
+# ==========================================
+# 2. CẤU HÌNH DỰ ÁN
+# ==========================================
 platform :ios, '12.0'
 
-# 2. Xóa bỏ warning không cần thiết
-_project_name = 'Runner'
+# Tắt thống kê cho đỡ rác log
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
 
 target 'Runner' do
   use_frameworks!
@@ -11,23 +37,24 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
-# 3. ĐOẠN QUAN TRỌNG NHẤT: BẬT QUYỀN (PERMISSION)
+# ==========================================
+# 3. BẬT QUYỀN (PERMISSION)
+# ==========================================
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     
     target.build_configurations.each do |config|
-      # Bật các quyền cần thiết lên
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
         '$(inherited)',
 
-        ## Bật quyền Bluetooth (Cái vợ đang thiếu)
+        ## Bật quyền Bluetooth
         'PERMISSION_BLUETOOTH=1',
 
         ## Bật quyền Camera
         'PERMISSION_CAMERA=1',
         
-        ## Bật quyền Location (Nếu cần)
+        ## Bật quyền Location (Cho chắc ăn)
         'PERMISSION_LOCATION=1',
       ]
     end
