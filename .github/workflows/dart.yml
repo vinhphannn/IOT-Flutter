@@ -1,47 +1,59 @@
 name: iOS-ipa-build
+
 on:
   workflow_dispatch:
+
 jobs:
   build-ios:
-    name: 🎉 iOS Build
-    runs-on: macos-latest
+    runs-on: macos-13   # ⚠️ KHÔNG dùng macos-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           architecture: x64
-      - name: Flutter pub get
+
+      - name: Flutter clean
+        run: flutter clean
+
+      - name: Get packages
         run: flutter pub get
+
       - name: Install CocoaPods
         run: |
-          cd ios
-          pod install --repo-update
-          cd ..
-      - name: Configure Flutter build
-        run: flutter build ios --release --no-codesign --config-only
-      - name: Xcode build unsigned
-        run: |
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos -derivedDataPath ../build/ios build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-          cd ..
+          sudo gem install cocoapods
+          pod --version
+
+      - name: Pod install
+        working-directory: ios
+        env:
+          COCOAPODS_DISABLE_STATS: true
+        run: pod install --repo-update
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
       - name: Create IPA
+        working-directory: build/ios/iphoneos
         run: |
-          cd build/ios/Build/Products/Release-iphoneos
           mkdir Payload
           mv Runner.app Payload/
-          zip -r FlutterIpaExport.ipa Payload/
+          zip -r FlutterIpaExport.ipa Payload
+
       - name: Create tag if not exists
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git tag v1.0 || true
           git push origin v1.0 || true
-      - name: Upload binaries to release
+
+      - name: Upload IPA to Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: build/ios/Build/Products/Release-iphoneos/FlutterIpaExport.ipa
+          file: build/ios/iphoneos/FlutterIpaExport.ipa
           tag: v1.0
           overwrite: true
-          body: "This is first release"
+          body: "iOS release build"
