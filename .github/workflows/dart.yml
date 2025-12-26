@@ -5,80 +5,35 @@ on:
 
 jobs:
   build-ios:
-    name: Build iOS IPA (no codesign)
-    runs-on: macos-15-intel
+    runs-on: macos-latest
 
     steps:
-      # 1. Checkout source
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2. Setup Flutter
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           channel: stable
           architecture: x64
 
-      # 3. Clean project
-      - name: Flutter clean
-        run: flutter clean
+      - run: flutter clean
+      - run: flutter pub get
 
-      # 4. Get Dart dependencies
-      - name: Flutter pub get
-        run: flutter pub get
-
-      # 5. Install CocoaPods
-      - name: Install CocoaPods
-        run: |
+      - run: |
           sudo gem install cocoapods
-          pod --version
+          cd ios
+          pod install --repo-update
 
-      # 6. Force iOS platform (fix default iOS 13)
-      - name: Force iOS platform 14.0
-        run: |
-          if [ -f ios/Podfile ]; then
-            sed -i '' "1s/^/platform :ios, '14.0'\n/" ios/Podfile
-          fi
+      - run: flutter build ios --release --no-codesign
 
-      # 7. Clean Pods
-      - name: Clean Pods
-        working-directory: ios
-        run: rm -rf Pods Podfile.lock
-
-      # 8. Pod install
-      - name: Pod install
-        working-directory: ios
-        env:
-          COCOAPODS_DISABLE_STATS: true
-        run: pod install --repo-update
-
-      # 9. Build iOS without code signing
-      - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign
-
-      # 10. Create IPA
-      - name: Create IPA
-        working-directory: build/ios/iphoneos
-        run: |
+      - run: |
+          cd build/ios/iphoneos
           mkdir Payload
-          mv Runner.app Payload/
+          mv Runner.app Payload
           zip -r FlutterIpaExport.ipa Payload
 
-      # 11. Create tag if not exists
-      - name: Create git tag
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git tag v1.0 || true
-          git push origin v1.0 || true
-
-      # 12. Upload IPA to GitHub Release
-      - name: Upload IPA to Release
-        uses: svenstaro/upload-release-action@v2
+      - uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ios/iphoneos/FlutterIpaExport.ipa
           tag: v1.0
           overwrite: true
-          body: "iOS IPA build (no code signing)"
