@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io'; // Để check Platform (Android/iOS)
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,10 +7,10 @@ import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../routes.dart';
 
-// UUID Phải khớp với Code ESP32 (main.cpp)
+// UUID Phải khớp với Code ESP32
 const String SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const String CHAR_CREDENTIALS_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8"; // Ghi
-const String CHAR_WIFI_LIST_UUID   = "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e"; // Đọc
+const String CHAR_WIFI_LIST_UUID   = "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e"; // Đọc/Notify
 
 class WifiSelectionScreen extends StatefulWidget {
   final BluetoothDevice device;
@@ -29,11 +30,11 @@ class WifiSelectionScreen extends StatefulWidget {
 
 class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
   bool _isLoading = true;
-  bool _isBinding = false; // Trạng thái gọi API Server
+  String _statusMessage = "Đang đọc danh sách Wifi..."; // Biến hiển thị trạng thái
   List<String> _wifiList = [];
   
-  BluetoothCharacteristic? _credCharacteristic; // Để ghi SSID/Pass
-  
+  BluetoothCharacteristic? _credCharacteristic; // Để ghi SSID/Pass hoặc lệnh SCAN
+
   final TextEditingController _passController = TextEditingController();
   String? _selectedSsid;
 
@@ -43,56 +44,92 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
     _discoverServices();
   }
 
-  // 1. Tìm Service và Đọc danh sách Wifi từ ESP32
+  // 1. Tìm Service, Đọc Wifi và Đăng ký nhận thông báo (Notify)
   Future<void> _discoverServices() async {
     try {
-      // Khám phá dịch vụ (Cần tăng MTU nếu list wifi dài, nhưng mặc định thường ok)
+      // Android cần xin MTU cao hơn để nhận chuỗi JSON dài
+      if (Platform.isAndroid) {
+        await widget.device.requestMtu(512);
+      }
+
       List<BluetoothService> services = await widget.device.discoverServices();
       
       for (var service in services) {
         if (service.uuid.toString() == SERVICE_UUID) {
           for (var c in service.characteristics) {
             
-            // Tìm Characteristic để GHI (Credentials)
+            // Tìm Characteristic để GHI (Gửi Wifi hoặc lệnh SCAN)
             if (c.uuid.toString() == CHAR_CREDENTIALS_UUID) {
               _credCharacteristic = c;
             }
             
-            // Tìm Characteristic để ĐỌC (Wifi List)
+            // Tìm Characteristic để ĐỌC & NOTIFY (Nhận List Wifi & Trạng thái)
             if (c.uuid.toString() == CHAR_WIFI_LIST_UUID) {
-              // Đọc dữ liệu từ ESP32
+              // A. Đăng ký lắng nghe (Notify)
+              await c.setNotifyValue(true);
+              c.lastValueStream.listen((value) {
+                _handleNotify(value);
+              });
+
+              // B. Đọc dữ liệu lần đầu
               List<int> value = await c.read();
-              String jsonString = utf8.decode(value);
-              debugPrint("Wifi List JSON: $jsonString");
-              
-              // Parse JSON: ["Wifi A", "Wifi B"]
-              List<dynamic> list = jsonDecode(jsonString);
-              if (mounted) {
-                setState(() {
-                  _wifiList = list.map((e) => e.toString()).toList();
-                  // Lọc bỏ trùng lặp và wifi rỗng
-                  _wifiList = _wifiList.toSet().toList();
-                  _wifiList.removeWhere((element) => element.isEmpty);
-                });
-              }
+              _handleNotify(value);
             }
           }
         }
       }
-
-      if (mounted) setState(() => _isLoading = false);
-
     } catch (e) {
       debugPrint("Lỗi BLE: $e");
       if (mounted) {
-         _showError("Lỗi đọc dữ liệu từ thiết bị. Thử lại...");
-         setState(() => _isLoading = false);
+         setState(() {
+           _isLoading = false;
+           _statusMessage = "Lỗi kết nối Bluetooth!";
+         });
+         _showError("Không thể đọc dữ liệu từ thiết bị.");
       }
     }
   }
 
-  // 2. Gửi SSID/Pass xuống ESP32 -> Sau đó gọi API Bind Device
-  Future<void> _connectAndBind() async {
+  // Hàm xử lý dữ liệu ESP32 gửi lên
+  void _handleNotify(List<int> value) {
+    if (value.isEmpty) return;
+    
+    String data = utf8.decode(value);
+    debugPrint(">>> BLE Notify: $data");
+
+    // Xử lý các trạng thái từ ESP32
+    if (data == "CONNECTING") {
+      setState(() => _statusMessage = "Thiết bị đang thử kết nối Wifi...");
+    } else if (data == "SUCCESS") {
+      // ESP32 báo đã có Wifi -> Giờ mới gọi API Server
+      _onWifiConnectedSuccess();
+    } else if (data == "FAIL") {
+      setState(() {
+        _isLoading = false;
+        _statusMessage = "Kết nối thất bại. Vui lòng thử lại.";
+      });
+      _showError("Sai mật khẩu hoặc sóng yếu!");
+    } else {
+      // Giả sử đây là JSON danh sách Wifi
+      try {
+        List<dynamic> list = jsonDecode(data);
+        if (mounted) {
+          setState(() {
+            _wifiList = list.map((e) => e.toString()).toList();
+            _wifiList = _wifiList.toSet().toList(); // Xóa trùng
+            _wifiList.removeWhere((element) => element.isEmpty);
+            
+            _isLoading = false; // Đã tải xong danh sách
+          });
+        }
+      } catch (e) {
+        // Dữ liệu không phải JSON (có thể là rác hoặc chưa đủ gói, bỏ qua)
+      }
+    }
+  }
+
+  // 2. Gửi SSID/Pass xuống ESP32 (Chỉ gửi BLE, KHÔNG gọi API ngay)
+  Future<void> _sendConfig() async {
     if (_selectedSsid == null) {
       _showError("Vui lòng chọn một mạng Wifi!");
       return;
@@ -102,10 +139,15 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
       return;
     }
 
-    setState(() => _isBinding = true);
+    // Ẩn bàn phím
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isLoading = true;
+      _statusMessage = "Đang gửi cấu hình xuống thiết bị...";
+    });
 
     try {
-      // BƯỚC 1: Gửi thông tin xuống ESP32 qua Bluetooth
       if (_credCharacteristic != null) {
         Map<String, String> config = {
           "ssid": _selectedSsid!,
@@ -113,23 +155,27 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
         };
         String jsonConfig = jsonEncode(config);
         
+        // Gửi xuống ESP
         await _credCharacteristic!.write(utf8.encode(jsonConfig));
-        debugPrint("Đã gửi Wifi xuống ESP32");
+        debugPrint("Đã gửi thông tin Wifi. Đợi ESP phản hồi...");
         
-        // Ngắt kết nối BLE ngay sau khi gửi để ESP32 rảnh tay kết nối Wifi
-        await widget.device.disconnect();
+        // QUAN TRỌNG: Không disconnect ở đây. Đợi Notify "SUCCESS" hoặc "FAIL".
       }
+    } catch (e) {
+      _showError("Lỗi gửi dữ liệu: $e");
+      setState(() => _isLoading = false);
+    }
+  }
 
-      // BƯỚC 2: Gọi API Server để lưu thiết bị vào phòng
-      // (Giả sử User đang chọn phòng hiện tại, hoặc mặc định phòng ID=1)
+  // 3. Hàm gọi API Bind (Chỉ chạy khi nhận được "SUCCESS" từ ESP)
+  Future<void> _onWifiConnectedSuccess() async {
+    setState(() => _statusMessage = "Đang thêm thiết bị vào tài khoản...");
+
+    try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
-      int? currentHouseId = prefs.getInt('currentHouseId');
-      
-      // Lấy danh sách phòng để user chọn (hoặc mặc định lấy phòng đầu tiên)
-      // Để đơn giản, chồng sẽ lấy ID phòng đầu tiên của nhà hiện tại.
-      // (Vợ có thể nâng cấp thêm 1 bước chọn phòng trước khi vào màn hình này)
-      int roomId = await _getFirstRoomId(currentHouseId ?? 1); 
+      // Lấy ID phòng mặc định là 1 (Vợ có thể sửa logic lấy phòng ở đây)
+      int roomId = 1; 
 
       // Gọi API Bind
       final response = await http.post(
@@ -139,7 +185,7 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          "name": widget.deviceType, // Tên mặc định là loại thiết bị
+          "name": widget.deviceType,
           "type": widget.deviceType,
           "macAddress": widget.macAddress,
           "roomId": roomId
@@ -147,6 +193,9 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
       );
 
       if (response.statusCode == 200) {
+        // Bind thành công -> Ngắt kết nối BLE để ESP rảnh tay
+        await widget.device.disconnect();
+        
         if (mounted) {
           _showSuccessDialog();
         }
@@ -157,18 +206,32 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
     } catch (e) {
       debugPrint("Lỗi Bind: $e");
       if (mounted) {
-        _showError("Cấu hình thất bại: $e");
-        setState(() => _isBinding = false);
+        _showError("Lỗi Server: $e");
+        setState(() => _isLoading = false);
       }
     }
   }
 
-  // Hàm phụ: Lấy ID phòng đầu tiên (Chữa cháy nếu chưa chọn phòng)
-  Future<int> _getFirstRoomId(int houseId) async {
-     // Vợ có thể hardcode return 1; nếu lười viết API lấy phòng
-     // Hoặc gọi lại API lấy danh sách phòng ở đây
-     return 1; // Tạm thời trả về 1
+  // 4. Hàm Refresh (Quét lại Wifi)
+  Future<void> _refreshWifi() async {
+    setState(() {
+      _isLoading = true;
+      _statusMessage = "Đang yêu cầu quét lại Wifi...";
+      _wifiList.clear();
+    });
+
+    try {
+      if (_credCharacteristic != null) {
+        // Gửi lệnh "SCAN" xuống ESP (ESP sẽ quét và gửi lại list mới qua Notify)
+        await _credCharacteristic!.write(utf8.encode("SCAN"));
+      }
+    } catch (e) {
+      _showError("Lỗi refresh: $e");
+      setState(() => _isLoading = false);
+    }
   }
+
+  // --- UI COMPONENTS ---
 
   void _showSuccessDialog() {
     showDialog(
@@ -176,7 +239,7 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text("Thành công! 🎉"),
-        content: const Text("Thiết bị đã được thêm vào nhà của bạn.\nVui lòng đợi 1-2 phút để thiết bị kết nối mạng."),
+        content: const Text("Thiết bị đã kết nối Wifi và được thêm vào nhà của bạn."),
         actions: [
           TextButton(
             onPressed: () {
@@ -194,21 +257,27 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
-  // ==========================================
-  // PHẦN 3: GIAO DIỆN UI
-  // ==========================================
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Cấu hình Wifi")),
+      appBar: AppBar(
+        title: const Text("Cấu hình Wifi"),
+        actions: [
+          // Nút Refresh xịn xò
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _refreshWifi,
+            tooltip: "Quét lại Wifi",
+          )
+        ],
+      ),
       body: _isLoading
-          ? const Center(child: Column(
+          ? Center(child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 20),
-                Text("Đang đọc danh sách Wifi từ thiết bị...")
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
+                Text(_statusMessage, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
               ],
             ))
           : SingleChildScrollView(
@@ -224,7 +293,7 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
                   
                   // Danh sách Wifi
                   Container(
-                    height: 300, // Chiều cao cố định cho list
+                    height: 300,
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
                       borderRadius: BorderRadius.circular(12),
@@ -252,7 +321,7 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
                   // Ô nhập mật khẩu
                   TextField(
                     controller: _passController,
-                    obscureText: true, // Ẩn mật khẩu
+                    obscureText: true,
                     decoration: InputDecoration(
                       labelText: "Mật khẩu Wifi",
                       hintText: "Nhập mật khẩu...",
@@ -268,23 +337,14 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
-                      onPressed: _isBinding ? null : _connectAndBind, // Disable khi đang xử lý
+                      onPressed: _isLoading ? null : _sendConfig, // Disable khi đang xử lý
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                         elevation: 5,
                       ),
-                      child: _isBinding 
-                        ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
-                              SizedBox(width: 10),
-                              Text("Đang thiết lập..."),
-                            ],
-                          )
-                        : const Text("KẾT NỐI NGAY", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      child: const Text("KẾT NỐI NGAY", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
                   ),
                 ],
