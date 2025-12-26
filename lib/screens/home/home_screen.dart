@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart'; // Import để lưu nhà đã chọn
+
 import '../../routes.dart';
 import '../../services/room_service.dart';
-// Import các file mới (Vợ đảm bảo đã tạo các file này rồi nhé)
+import '../../services/house_service.dart'; // Import Service mới
 import '../../models/device_model.dart';
+import '../../models/house_model.dart'; // Import Model mới
 import '../../widgets/device_card.dart';
 import '../../widgets/summary_card.dart';
 import 'category_devices_screen.dart';
@@ -18,14 +21,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // --- 1. BIẾN UI ---
+  // --- 1. BIẾN DATA NHÀ & PHÒNG ---
+  List<House> _houses = [];
+  House? _currentHouse; // Nhà đang được chọn
+  bool _isLoadingHouse = true;
+
   int _selectedRoomIndex = 0;
   List<String> _rooms = ["All Rooms"];
   
-  // Danh sách hiển thị ở trang Home (Lọc theo phòng)
+  // Danh sách thiết bị hiển thị
   List<Device> _homeDisplayDevices = [];
 
-  // --- 2. BIẾN THỜI TIẾT (Đã khôi phục đầy đủ) ---
+  // --- 2. BIẾN THỜI TIẾT ---
   bool _isLoadingWeather = true;
   String _temp = "--"; 
   String _cityName = "Locating..."; 
@@ -33,20 +40,91 @@ class _HomeScreenState extends State<HomeScreen> {
   String _humidity = "-"; 
   String _windSpeed = "-"; 
   String _weatherIconCode = "02d";
-  
-  // API Key (Vợ nhớ giữ bí mật nhé)
   final String _apiKey = "9d7d651e4671cadec782b9a990c7d992";
 
   @override
   void initState() {
     super.initState();
-    _checkLocationPermission(); // Gọi hàm lấy vị trí thật
-    _fetchRoomsData();
-    _filterDevices(); // Lọc thiết bị lần đầu
+    _checkLocationPermission();
+    _initHomeData(); // Hàm khởi tạo dữ liệu chính
   }
 
-  // --- LOGIC LỌC THIẾT BỊ ---
+  // --- LOGIC KHỞI TẠO DỮ LIỆU ---
+  Future<void> _initHomeData() async {
+    await _fetchHouses();
+    // Lọc thiết bị ban đầu (dùng demo data tạm thời)
+    _filterDevices(); 
+  }
+
+  // --- A. LẤY DANH SÁCH NHÀ ---
+  Future<void> _fetchHouses() async {
+    try {
+      HouseService houseService = HouseService();
+      List<House> houses = await houseService.fetchMyHouses();
+
+      if (mounted) {
+        setState(() {
+          _houses = houses;
+          if (_houses.isNotEmpty) {
+            // Mặc định chọn nhà đầu tiên (Sau này có thể lấy từ Cache SharedPreferences)
+            _currentHouse = _houses[0];
+            _isLoadingHouse = false;
+          }
+        });
+
+        // Sau khi có nhà -> Lấy phòng của nhà đó ngay
+        if (_currentHouse != null) {
+          await _fetchRoomsForHouse(_currentHouse!.id);
+        }
+      }
+    } catch (e) {
+      debugPrint("Lỗi lấy danh sách nhà: $e");
+      if (mounted) setState(() => _isLoadingHouse = false);
+    }
+  }
+
+  // --- B. LẤY PHÒNG THEO ID NHÀ ---
+  Future<void> _fetchRoomsForHouse(int houseId) async {
+    try {
+      RoomService roomService = RoomService();
+      // Gọi API lấy phòng theo ID nhà
+      List<String> roomsFromDb = await roomService.fetchRoomNamesByHouse(houseId);
+      
+      if (mounted) {
+        setState(() {
+          _rooms = ["All Rooms", ...roomsFromDb];
+          _selectedRoomIndex = 0; // Reset về tab đầu tiên
+        });
+        _filterDevices(); // Filter lại thiết bị theo phòng mới
+      }
+    } catch (e) {
+      debugPrint("Lỗi lấy phòng: $e");
+    }
+  }
+
+  // --- C. XỬ LÝ KHI CHỌN NHÀ KHÁC ---
+  void _onHouseSelected(House house) async {
+    if (_currentHouse?.id == house.id) return; // Nếu chọn lại nhà cũ thì thôi
+
+    setState(() {
+      _currentHouse = house;
+      _isLoadingHouse = true; // Hiện loading nhẹ
+    });
+
+    // Lưu ID nhà vào bộ nhớ để các màn hình khác (như Add Device) dùng
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('currentHouseId', house.id);
+
+    // Load lại phòng của nhà mới
+    await _fetchRoomsForHouse(house.id);
+    
+    setState(() => _isLoadingHouse = false);
+  }
+
+  // --- D. LOGIC LỌC THIẾT BỊ ---
   void _filterDevices() {
+    // Tạm thời vẫn dùng Demo Data. 
+    // Sau này sẽ gọi API lấy thiết bị theo HouseID và RoomID
     setState(() {
       if (_selectedRoomIndex == 0) {
         _homeDisplayDevices = demoDevices;
@@ -57,22 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // --- LOGIC LẤY PHÒNG TỪ SERVER ---
-  Future<void> _fetchRoomsData() async {
-    try {
-      RoomService roomService = RoomService();
-      List<String> roomsFromDb = await roomService.fetchRooms();
-      if (mounted) {
-        setState(() {
-          _rooms = ["All Rooms", ...roomsFromDb];
-        });
-      }
-    } catch (e) {
-      debugPrint("Lỗi lấy phòng: $e");
-    }
-  }
-
-  // --- LOGIC CHUYỂN TRANG CATEGORY ---
   void _navigateToCategory(String type, String title) {
     Navigator.push(
       context,
@@ -82,17 +144,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- 3. LOGIC THỜI TIẾT (ĐÃ KHÔI PHỤC) ---
+  // --- LOGIC THỜI TIẾT (Giữ nguyên) ---
   Future<void> _checkLocationPermission() async {
     bool serviceEnabled;
     LocationPermission permission;
-
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       setState(() { _cityName = "GPS Off"; _isLoadingWeather = false; });
       return;
     }
-
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       if (mounted) _showLocationDialog(); 
@@ -161,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 24),
               const Text("Enable Location", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              Text("Please activate location to see local weather.", textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+              const Text("Please activate location to see local weather.", textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: Colors.grey)),
               const SizedBox(height: 30),
               SizedBox(
                 width: double.infinity, height: 50,
@@ -211,12 +271,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // --- HEADER ĐƯỢC NÂNG CẤP ---
               _buildHeader(),
+              
               const SizedBox(height: 24),
-              
-              // Widget Thời tiết (Đã khôi phục)
               _buildWeatherCard(), 
-              
               const SizedBox(height: 24),
 
               // --- SUMMARY CARDS ---
@@ -249,7 +308,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("All Devices", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  // Nút Add nhỏ
                   InkWell(
                     onTap: () => Navigator.pushNamed(context, AppRoutes.addDevice),
                     borderRadius: BorderRadius.circular(8),
@@ -268,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
 
-              // --- BỘ LỌC PHÒNG ---
+              // --- BỘ LỌC PHÒNG (Dữ liệu từ API) ---
               SizedBox(
                 height: 40,
                 child: ListView.separated(
@@ -277,6 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     final isSelected = _selectedRoomIndex == index;
+                    // Tạm tính số lượng giả
                     int count = index == 0 
                       ? demoDevices.length 
                       : demoDevices.where((d) => d.room == _rooms[index]).length;
@@ -338,19 +397,56 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- WIDGETS CON ---
-
+  // --- WIDGET HEADER MỚI (CÓ POPUP CHỌN NHÀ) ---
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            const Text("My Home", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            const Icon(Icons.keyboard_arrow_down, size: 28),
-          ],
+        // Dropdown chọn nhà
+        PopupMenuButton<House>(
+          onSelected: _onHouseSelected,
+          offset: const Offset(0, 40), // Đẩy menu xuống dưới một chút
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          itemBuilder: (BuildContext context) {
+            return _houses.map((House house) {
+              return PopupMenuItem<House>(
+                value: house,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.home, 
+                      color: house.id == _currentHouse?.id ? Colors.blue : Colors.grey,
+                      size: 20
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      house.name,
+                      style: TextStyle(
+                        fontWeight: house.id == _currentHouse?.id ? FontWeight.bold : FontWeight.normal,
+                        color: house.id == _currentHouse?.id ? Colors.blue : Colors.black87
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList();
+          },
+          child: Row(
+            children: [
+              Text(
+                _currentHouse?.name ?? "Loading...", // Hiển thị tên nhà đang chọn
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 8),
+              if (_isLoadingHouse) 
+                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              else
+                const Icon(Icons.keyboard_arrow_down, size: 28),
+            ],
+          ),
         ),
+
+        // Icon bên phải
         Row(
           children: [
             GestureDetector(
@@ -381,9 +477,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
   
-  // Widget Thời tiết ĐẦY ĐỦ (Đã khôi phục)
+  // ... (Các Widget Weather, EmptyState giữ nguyên như cũ) ...
   Widget _buildWeatherCard() {
-    return Container(
+    // (Copy lại code cũ của vợ vào đây, chồng không paste lại để tiết kiệm dòng)
+     return Container(
       width: double.infinity, height: 180, padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
@@ -447,9 +544,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Widget Empty State đầy đủ (Đã khôi phục)
   Widget _buildEmptyState(Color primaryColor) {
-    return Center(
+     return Center(
       child: Column(
         children: [
           Stack(

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:ui'; // Cần cho hiệu ứng Blur
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:flutter_map/flutter_map.dart'; // Bản đồ
+import 'package:latlong2/latlong.dart';      // Tọa độ
 import 'package:http/http.dart' as http;
 import '../../routes.dart';
 import '../../services/auth_service.dart'; // <--- Import Service
@@ -19,14 +19,14 @@ class _SetupScreenState extends State<SetupScreen> {
   int _currentStep = 0;
   final int _totalSteps = 4;
   final PageController _pageController = PageController();
-  bool _isLoading = false; // <--- Biến loading
+  bool _isLoading = false; 
 
   // Dữ liệu User nhập
   String? _selectedCountry;
   final TextEditingController _homeNameController = TextEditingController();
   final List<String> _selectedRooms = [];
 
-  // --- 2. BIẾN STEP 1 ---
+  // --- 2. BIẾN STEP 1 (COUNTRY) ---
   final TextEditingController _searchController = TextEditingController();
   final List<Map<String, String>> _countries = [
     {'name': 'Vietnam', 'flag': '🇻🇳'},
@@ -40,7 +40,8 @@ class _SetupScreenState extends State<SetupScreen> {
   ];
   List<Map<String, String>> _filteredCountries = [];
 
-  // --- 3. BIẾN STEP 3 ---
+  // --- 3. BIẾN STEP 3 (ROOMS) ---
+  // Lưu ý: Vợ nhớ check pubspec.yaml đã khai báo assets/icons/ chưa nhé
   final List<Map<String, String>> _rooms = [
     {"name": "Living Room", "icon": "assets/icons/living_room.png"},
     {"name": "Bedroom", "icon": "assets/icons/bedroom.png"},
@@ -55,19 +56,33 @@ class _SetupScreenState extends State<SetupScreen> {
   // --- 4. BIẾN STEP 4 (MAP) ---
   final MapController _mapController = MapController();
   final TextEditingController _addressController = TextEditingController();
-  LatLng _currentCenter = const LatLng(10.7769, 106.7009);
+  LatLng _currentCenter = const LatLng(10.7769, 106.7009); // Mặc định HCM
   bool _isGettingAddress = false;
 
   @override
   void initState() {
     super.initState();
     _filteredCountries = _countries;
+    // Lấy địa chỉ mặc định ban đầu
     _getAddressFromLatLng(_currentCenter);
   }
 
-  // --- LOGIC XỬ LÝ (QUAN TRỌNG) ---
+  // --- QUAN TRỌNG: HỦY CONTROLLER ĐỂ TRÁNH RÒ RỈ MEMORY ---
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _homeNameController.dispose();
+    _searchController.dispose();
+    _addressController.dispose();
+    // _mapController không cần dispose
+    super.dispose();
+  }
 
-  // 1. Hàm chuyển trang (Next)
+  // ==========================================
+  // PHẦN 1: LOGIC XỬ LÝ (ACTION)
+  // ==========================================
+
+  // 1. Chuyển trang (Next)
   void _nextPage() {
     // Validate từng bước
     if (_currentStep == 0 && _selectedCountry == null) {
@@ -95,36 +110,7 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
 
-  // 2. Hàm Gửi dữ liệu về Backend
-  void _submitSetup() async {
-    setState(() => _isLoading = true); // Bật loading
-
-    AuthService authService = AuthService();
-    bool success = await authService.setupProfile(
-      nationality: _selectedCountry ?? "Vietnam",
-      houseName: _homeNameController.text,
-      address: _addressController.text,
-      roomNames: _selectedRooms,
-    );
-
-    if (mounted) {
-      setState(() => _isLoading = false); // Tắt loading
-
-      if (success) {
-        // Thành công -> Chuyển sang màn hình Hoàn tất
-        Navigator.pushReplacementNamed(context, AppRoutes.signUpComplete);
-      } else {
-        _showError("Setup failed. Please try again.");
-      }
-    }
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-
+  // 2. Quay lại (Back)
   void _prevPage() {
     if (_currentStep > 0) {
       _pageController.previousPage(
@@ -136,14 +122,47 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
 
-  // --- API MAP ---
+  // 3. Gửi dữ liệu về Backend
+  void _submitSetup() async {
+    setState(() => _isLoading = true);
+
+    AuthService authService = AuthService();
+    bool success = await authService.setupProfile(
+      nationality: _selectedCountry ?? "Vietnam",
+      houseName: _homeNameController.text,
+      address: _addressController.text,
+      roomNames: _selectedRooms,
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+
+      if (success) {
+        // Thành công -> Chuyển sang màn hình Hoàn tất hoặc Home
+        // Ở đây chồng chuyển sang Home luôn hoặc trang Success tùy vợ config route
+        Navigator.pushReplacementNamed(context, AppRoutes.home); 
+      } else {
+        _showError("Setup failed. Please check your connection.");
+      }
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  // 4. API Lấy địa chỉ từ Tọa độ (OpenStreetMap)
   Future<void> _getAddressFromLatLng(LatLng point) async {
     if (!mounted) return;
     setState(() => _isGettingAddress = true);
     try {
       final url = Uri.parse(
           'https://nominatim.openstreetmap.org/reverse?format=json&lat=${point.latitude}&lon=${point.longitude}&zoom=18&addressdetails=1');
+      // Thêm User-Agent để không bị block
       final response = await http.get(url, headers: {'User-Agent': 'com.smartify.app/1.0'});
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (mounted) {
@@ -153,12 +172,13 @@ class _SetupScreenState extends State<SetupScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("Error Map: $e");
     } finally {
       if (mounted) setState(() => _isGettingAddress = false);
     }
   }
 
+  // 5. Lọc quốc gia
   void _runFilter(String enteredKeyword) {
     setState(() {
       if (enteredKeyword.isEmpty) {
@@ -171,6 +191,10 @@ class _SetupScreenState extends State<SetupScreen> {
     });
   }
 
+  // ==========================================
+  // PHẦN 2: GIAO DIỆN (UI)
+  // ==========================================
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -178,9 +202,10 @@ class _SetupScreenState extends State<SetupScreen> {
 
     return Stack(
       children: [
-        // LỚP 1: GIAO DIỆN CHÍNH
+        // LỚP 1: UI CHÍNH
         Scaffold(
           backgroundColor: Colors.white,
+          // --- APP BAR ---
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
@@ -189,15 +214,15 @@ class _SetupScreenState extends State<SetupScreen> {
               onPressed: _prevPage,
             ),
             title: SizedBox(
-              height: 12,
-              width: size.width * 0.65,
+              height: 8,
+              width: size.width * 0.6,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: LinearProgressIndicator(
                   value: (_currentStep + 1) / _totalSteps,
                   backgroundColor: Colors.grey[200],
                   valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                  minHeight: 12,
+                  minHeight: 8,
                 ),
               ),
             ),
@@ -214,12 +239,14 @@ class _SetupScreenState extends State<SetupScreen> {
               )
             ],
           ),
+          
+          // --- BODY ---
           body: Column(
             children: [
               Expanded(
                 child: PageView(
                   controller: _pageController,
-                  physics: const NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(), // Chặn vuốt tay, bắt buộc bấm nút
                   onPageChanged: (index) => setState(() => _currentStep = index),
                   children: [
                     _buildStep1Country(),
@@ -229,27 +256,33 @@ class _SetupScreenState extends State<SetupScreen> {
                   ],
                 ),
               ),
+              
+              // --- BOTTOM BUTTONS ---
               Container(
                 padding: const EdgeInsets.all(24),
                 child: Row(
                   children: [
-                    // Nút Skip (Chỉ hiện nếu không bắt buộc - nhưng ở đây ta cứ để)
-                    Expanded(
-                      child: SizedBox(
-                        height: 55,
-                        child: ElevatedButton(
-                          onPressed: _nextPage, // Tạm thời Skip cũng là Next
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor.withOpacity(0.1),
-                            foregroundColor: primaryColor,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    // Nút Skip (Ẩn ở bước cuối)
+                    if (_currentStep < _totalSteps - 1)
+                      Expanded(
+                        child: SizedBox(
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed: _nextPage,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor.withOpacity(0.1),
+                              foregroundColor: primaryColor,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            ),
+                            child: const Text("Skip", style: TextStyle(fontWeight: FontWeight.bold)),
                           ),
-                          child: const Text("Skip", style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 20),
+                    
+                    if (_currentStep < _totalSteps - 1)
+                      const SizedBox(width: 20),
+
                     // Nút Continue / Finish
                     Expanded(
                       child: SizedBox(
@@ -276,7 +309,7 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
         ),
 
-        // LỚP 2: LOADING OVERLAY
+        // LỚP 2: LOADING OVERLAY (Hiển thị khi đang gọi API)
         if (_isLoading)
           Positioned.fill(
             child: BackdropFilter(
@@ -295,7 +328,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       children: [
                         CircularProgressIndicator(color: primaryColor),
                         const SizedBox(height: 20),
-                        const Text("Setting up your home...", style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text("Creating your dream home...", style: TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -307,38 +340,22 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  // --- CÁC WIDGET BƯỚC 1, 2, 3, 4 (GIỮ NGUYÊN NHƯ CŨ) ---
-  // (Vợ copy lại phần _buildStep1Country, _buildStep2HomeName... từ code cũ vào đây nhé)
-  // Để cho gọn chồng không paste lại phần UI dài dòng đó, chỉ lưu ý là logic _nextPage ở trên đã xử lý hết rồi.
+  // ==========================================
+  // PHẦN 3: CÁC WIDGET CON (STEPS)
+  // ==========================================
 
-  // ... (Paste các hàm UI vào đây)
-    // --- STEP 1 ---
+  // --- STEP 1: CHỌN QUỐC GIA ---
   Widget _buildStep1Country() {
     final primaryColor = Theme.of(context).primaryColor;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center, 
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 10),
-          RichText(
-            textAlign: TextAlign.center,
-            text: TextSpan(
-              text: "Select ",
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black, fontFamily: 'Inter'),
-              children: [
-                TextSpan(text: "Country", style: TextStyle(color: primaryColor)),
-                const TextSpan(text: " of Origin", style: TextStyle(color: Colors.black)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "Let's start by selecting the country where your smart haven resides.",
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            textAlign: TextAlign.center,
-          ),
+          _buildHeader("Select Country of Origin", "Let's start by selecting the country where your smart haven resides."),
           const SizedBox(height: 20),
+          
           TextField(
             controller: _searchController,
             onChanged: (value) => _runFilter(value),
@@ -353,53 +370,45 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          
           Expanded(
-            child: _filteredCountries.isNotEmpty 
-            ? ListView.separated(
-              itemCount: _filteredCountries.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final country = _filteredCountries[index];
-                final isSelected = _selectedCountry == country['name'];
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedCountry = country['name'];
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: isSelected ? primaryColor.withOpacity(0.05) : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isSelected ? primaryColor : Colors.grey.shade200, width: 1.5),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32, height: 32,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
-                          child: Text(country['flag']!, style: const TextStyle(fontSize: 18)),
+            child: _filteredCountries.isNotEmpty
+                ? ListView.separated(
+                    itemCount: _filteredCountries.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final country = _filteredCountries[index];
+                      final isSelected = _selectedCountry == country['name'];
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedCountry = country['name']),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryColor.withOpacity(0.05) : Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: isSelected ? primaryColor : Colors.grey.shade200, width: 1.5),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(country['flag']!, style: const TextStyle(fontSize: 24)),
+                              const SizedBox(width: 15),
+                              Text(country['name']!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                              const Spacer(),
+                              if (isSelected) Icon(Icons.check_circle, color: primaryColor, size: 20),
+                            ],
+                          ),
                         ),
-                        const SizedBox(width: 15),
-                        Text(country['name']!, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87)),
-                        const Spacer(),
-                        if (isSelected) Icon(Icons.check_circle, color: primaryColor, size: 20),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            )
-            : const Center(child: Text("No country found", style: TextStyle(color: Colors.grey))),
+                      );
+                    },
+                  )
+                : const Center(child: Text("No country found", style: TextStyle(color: Colors.grey))),
           ),
         ],
       ),
     );
   }
 
-  // --- STEP 2 ---
+  // --- STEP 2: NHẬP TÊN NHÀ ---
   Widget _buildStep2HomeName() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -424,7 +433,7 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  // --- STEP 3 ---
+  // --- STEP 3: CHỌN PHÒNG ---
   Widget _buildStep3AddRooms() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -463,15 +472,15 @@ class _SetupScreenState extends State<SetupScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        // Dùng Image.asset và icon placeholder nếu lỗi
                         Image.asset(
                           roomIcon,
                           width: 40, height: 40,
                           color: isSelected ? Colors.white : Colors.grey[600],
-                          errorBuilder: (context, error, stackTrace) => Icon(Icons.error, color: Colors.grey),
+                          errorBuilder: (context, error, stackTrace) => Icon(Icons.meeting_room, color: isSelected ? Colors.white : Colors.grey),
                         ),
                         const SizedBox(height: 12),
                         Text(roomName, style: TextStyle(color: isSelected ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontSize: 15)),
-                        if (isSelected) const Padding(padding: EdgeInsets.only(top: 8), child: Icon(Icons.check_circle, color: Colors.white, size: 18))
                       ],
                     ),
                   ),
@@ -484,40 +493,30 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  // --- STEP 4: LOCATION (ĐÃ SỬA LẠI THEO THIẾT KẾ) ---
+  // --- STEP 4: BẢN ĐỒ VỊ TRÍ ---
   Widget _buildStep4Location() {
     final primaryColor = Theme.of(context).primaryColor;
-    
-    // Sử dụng SingleChildScrollView + Column để bố trí dạng khối
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, // Căn trái cho tiêu đề
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 10),
-          // 1. Header (Tiêu đề + Mô tả)
-          _buildHeader("Set Home Location", 
-              "Pin your home's location to enhance location-based features. Privacy is our priority."),
-          
+          _buildHeader("Set Home Location", "Pin your home's location to enhance location-based features."),
           const SizedBox(height: 30),
 
-          // 2. KHUNG BẢN ĐỒ (VUÔNG/CHỮ NHẬT BO GÓC)
+          // KHUNG BẢN ĐỒ
           Container(
-            height: 400, // Chiều cao cố định cho đẹp (khoảng 50-60% màn hình)
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24), // Bo góc giống thiết kế
-              // Nếu muốn có viền hoặc bóng đổ cho khung map thì thêm ở đây
-              // color: Colors.grey[100], 
-            ),
+            height: 400,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24), // Cắt bản đồ theo góc bo
+              borderRadius: BorderRadius.circular(24),
               child: Stack(
                 children: [
-                  // Lớp dưới: Bản đồ di chuyển được
                   FlutterMap(
                     mapController: _mapController,
                     options: MapOptions(
-                      initialCenter: _currentCenter, 
+                      initialCenter: _currentCenter,
                       initialZoom: 15.0,
                       onMapEvent: (MapEvent event) {
                         if (event is MapEventMoveEnd) {
@@ -529,20 +528,14 @@ class _SetupScreenState extends State<SetupScreen> {
                     children: [
                       TileLayer(
                         urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.smartify.app', 
+                        userAgentPackageName: 'com.smartify.app',
                       ),
                     ],
                   ),
-
-                  // Lớp trên: Cái ghim (Pin) nằm CỐ ĐỊNH CHÍNH GIỮA khung
                   Center(
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 40), // Căn chỉnh mũi kim chạm đúng tâm
-                      child: Icon(
-                        Icons.location_on, 
-                        size: 50, 
-                        color: primaryColor // Màu xanh chủ đạo giống thiết kế (hoặc Colors.blue)
-                      ),
+                      padding: const EdgeInsets.only(bottom: 40),
+                      child: Icon(Icons.location_on, size: 50, color: primaryColor),
                     ),
                   ),
                 ],
@@ -551,25 +544,15 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
 
           const SizedBox(height: 24),
-
-          // 3. Address Details (Nhãn + Ô nhập liệu)
-          const Text(
-            "Address Details", 
-            style: TextStyle(
-              fontSize: 16, 
-              fontWeight: FontWeight.bold,
-              color: Colors.black87
-            )
-          ),
+          const Text("Address Details", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           
-          // Ô chứa địa chỉ (Nền xám nhạt)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[50], // Nền xám nhạt giống thiết kế
+              color: Colors.grey[50],
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200), // Viền mỏng
+              border: Border.all(color: Colors.grey.shade200),
             ),
             child: Row(
               children: [
@@ -582,41 +565,38 @@ class _SetupScreenState extends State<SetupScreen> {
                       border: InputBorder.none,
                       hintText: "Move map to set location...",
                       isDense: true,
-                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
                 ),
-                // Icon loading nhỏ nếu đang lấy địa chỉ
                 if (_isGettingAddress)
-                  const SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                 else 
-                  // Icon định vị nhỏ bên phải text
                   const Icon(Icons.my_location, color: Colors.grey, size: 20)
               ],
             ),
           ),
-          
-          const SizedBox(height: 20), // Khoảng trống dưới cùng
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  // Widget Header chung
+  // --- WIDGET HEADER CHUNG (ĐÃ SỬA LỖI MÀU CHỮ) ---
   Widget _buildHeader(String title, String subtitle) {
-    // Tách riêng chữ "Location" tô màu xanh nếu cần, ở đây mình dùng RichText
+    // Logic: Từ đầu tiên màu đen, các từ sau màu xanh chủ đạo
+    List<String> words = title.split(' ');
+    String firstWord = words.isNotEmpty ? "${words[0]} " : "";
+    String restWords = words.length > 1 ? words.sublist(1).join(' ') : "";
+
     return Column(
       children: [
         RichText(
           textAlign: TextAlign.center,
           text: TextSpan(
-            text: "Set Home ",
+            text: firstWord,
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black, fontFamily: 'Inter'),
             children: [
-              TextSpan(text: title.replaceAll("Set Home ", ""), style: TextStyle(color: Theme.of(context).primaryColor)),
+              TextSpan(text: restWords, style: TextStyle(color: Theme.of(context).primaryColor)),
             ],
           ),
         ),
@@ -629,5 +609,4 @@ class _SetupScreenState extends State<SetupScreen> {
       ],
     );
   }
-
 }
