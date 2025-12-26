@@ -1,6 +1,10 @@
-# ==========================================
-# 1. ĐOẠN CODE "TÌM ĐƯỜNG" (LÚC NÃY BỊ THIẾU)
-# ==========================================
+# 1. Khai báo Platform
+platform :ios, '12.0'
+
+# Tắt thống kê
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# 2. Hàm tìm đường dẫn Flutter SDK (Giữ nguyên)
 def flutter_root
   generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
   unless File.exist?(generated_xcode_build_settings_path)
@@ -14,15 +18,9 @@ def flutter_root
   raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig and running flutter pub get"
 end
 
-require File.expand_path(File.join('flutter', 'ios', 'framework', 'Podfile'), flutter_root)
-
-# ==========================================
-# 2. CẤU HÌNH DỰ ÁN
-# ==========================================
-platform :ios, '12.0'
-
-# Tắt thống kê cho đỡ rác log
-ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+# 3. --- SỬA LỖI Ở ĐÂY ---
+# Thay vì trỏ vào framework/Podfile (cũ), ta trỏ vào podhelper (mới)
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
 
 project 'Runner', {
   'Debug' => :debug,
@@ -34,12 +32,11 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
+  # Hàm cài đặt Pod của Flutter mới
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
-# ==========================================
-# 3. BẬT QUYỀN (PERMISSION)
-# ==========================================
+# 4. BẬT QUYỀN (PERMISSION)
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
@@ -47,14 +44,8 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
         '$(inherited)',
-
-        ## Bật quyền Bluetooth
         'PERMISSION_BLUETOOTH=1',
-
-        ## Bật quyền Camera
         'PERMISSION_CAMERA=1',
-        
-        ## Bật quyền Location (Cho chắc ăn)
         'PERMISSION_LOCATION=1',
       ]
     end
