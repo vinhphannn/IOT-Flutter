@@ -11,7 +11,6 @@
 **/DerivedData/
 **/Pods/
 **/.symlinks/
-profile
 xcuserdata
 **/.generated/
 Flutter/App.framework

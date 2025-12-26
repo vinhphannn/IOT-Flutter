@@ -39,11 +39,6 @@ dev_dependencies:
   flutter_launcher_icons: ^0.13.1
 
 
-flutter_icons:
-  ios: true
-  android: true
-  image_path: assets/icon/app_icon.png
-  remove_alpha_ios: true
 
 # Phần quan trọng nhất ở đây
 flutter:
