@@ -5,36 +5,59 @@ on:
 
 jobs:
   build-ios:
+    name: Build iOS IPA
     runs-on: macos-15-intel
 
     steps:
+      # 1. Checkout source
       - uses: actions/checkout@v4
 
+      # 2. Setup Flutter
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           architecture: x64
 
+      # 3. Flutter clean
       - name: Flutter clean
         run: flutter clean
 
-      - name: Get packages
+      # 4. Get Dart packages
+      - name: Flutter pub get
         run: flutter pub get
 
+      # 5. Install CocoaPods
       - name: Install CocoaPods
         run: |
           sudo gem install cocoapods
           pod --version
 
+      # 6. Generate Podfile if not exists (Flutter will create it)
+      - name: Prepare iOS project
+        run: flutter build ios --config-only
+
+      # 7. Force iOS platform (FIX iOS 13 default)
+      - name: Force iOS platform 14.0
+        run: |
+          sed -i '' "1s/^/platform :ios, '14.0'\n/" ios/Podfile
+
+      # 8. Clean Pods
+      - name: Clean Pods
+        working-directory: ios
+        run: rm -rf Pods Podfile.lock
+
+      # 9. Pod install
       - name: Pod install
         working-directory: ios
         env:
           COCOAPODS_DISABLE_STATS: true
         run: pod install --repo-update
 
-      - name: Build iOS (no codesign)
+      # 10. Build iOS (no codesign)
+      - name: Build iOS release
         run: flutter build ios --release --no-codesign
 
+      # 11. Create IPA
       - name: Create IPA
         working-directory: build/ios/iphoneos
         run: |
@@ -42,6 +65,7 @@ jobs:
           mv Runner.app Payload/
           zip -r FlutterIpaExport.ipa Payload
 
+      # 12. Create git tag (if not exists)
       - name: Create tag if not exists
         run: |
           git config user.name "github-actions"
@@ -49,6 +73,7 @@ jobs:
           git tag v1.0 || true
           git push origin v1.0 || true
 
+      # 13. Upload IPA to Release
       - name: Upload IPA to Release
         uses: svenstaro/upload-release-action@v2
         with:
@@ -56,4 +81,4 @@ jobs:
           file: build/ios/iphoneos/FlutterIpaExport.ipa
           tag: v1.0
           overwrite: true
-          body: "iOS release build"
+          body: "iOS IPA build (no codesign)"
