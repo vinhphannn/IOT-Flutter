@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui'; 
+import 'dart:ui';
 import '../../widgets/social_button.dart';
 import '../../routes.dart';
 import '../../services/auth_service.dart';
@@ -47,7 +47,7 @@ class _SignInScreenState extends State<SignInScreen> {
       _emailController.text,
       _passController.text,
     );
-//test xoa khi khong dung
+    //test xoa khi khong dung
     // Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
 
     if (mounted) {
@@ -62,17 +62,30 @@ class _SignInScreenState extends State<SignInScreen> {
         if (isSetup) {
           // A. Đã có nhà -> Vào Dashboard
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Welcome back!"), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text("Welcome back!"),
+              backgroundColor: Colors.green,
+            ),
           );
-          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.home,
+            (route) => false,
+          );
         } else {
           // B. Chưa có nhà -> Sang trang Setup ngay
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Let's setup your smart home!"), backgroundColor: Colors.blue),
+            const SnackBar(
+              content: Text("Let's setup your smart home!"),
+              backgroundColor: Colors.blue,
+            ),
           );
-          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.signUpSetup,
+            (route) => false,
+          );
         }
-
       } else {
         // 5. Thất bại -> Báo lỗi
         ScaffoldMessenger.of(context).showSnackBar(
@@ -95,12 +108,21 @@ class _SignInScreenState extends State<SignInScreen> {
         // --- LỚP 1: GIAO DIỆN CHÍNH ---
         Scaffold(
           backgroundColor: Colors.white,
+          // --- TRONG SignInScreen.dart ---
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.black),
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                // Kiểm tra nếu có thể quay lại thì pop, không thì về Welcome
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  // Trường hợp này dùng khi vừa đăng xuất xong, ngăn xếp trống
+                  Navigator.pushReplacementNamed(context, AppRoutes.loginOptions);
+                }
+              },
             ),
           ),
           body: SingleChildScrollView(
@@ -115,10 +137,13 @@ class _SignInScreenState extends State<SignInScreen> {
                   children: [
                     const Text(
                       "Welcome Back!",
-                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    const Text("👋", style: TextStyle(fontSize: 26)), 
+                    const Text("👋", style: TextStyle(fontSize: 26)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -159,11 +184,14 @@ class _SignInScreenState extends State<SignInScreen> {
                     Row(
                       children: [
                         SizedBox(
-                          width: 24, height: 24,
+                          width: 24,
+                          height: 24,
                           child: Checkbox(
                             value: _rememberMe,
                             activeColor: primaryColor,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                             onChanged: (value) {
                               setState(() {
                                 _rememberMe = value!;
@@ -172,25 +200,33 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text("Remember me", style: TextStyle(fontWeight: FontWeight.w500)),
+                        const Text(
+                          "Remember me",
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
                       ],
                     ),
 
                     TextButton(
                       onPressed: () {
-                         Navigator.pushNamed(context, AppRoutes.forgotPassword);
+                        Navigator.pushNamed(context, AppRoutes.forgotPassword);
                       },
                       style: TextButton.styleFrom(padding: EdgeInsets.zero),
                       child: Text(
                         "Forgot Password?",
-                        style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    )
+                    ),
                   ],
                 ),
 
                 const SizedBox(height: 30),
-                Center(child: Text("or", style: TextStyle(color: Colors.grey[400]))),
+                Center(
+                  child: Text("or", style: TextStyle(color: Colors.grey[400])),
+                ),
                 const SizedBox(height: 30),
 
                 // Social Buttons
@@ -228,12 +264,18 @@ class _SignInScreenState extends State<SignInScreen> {
                     onPressed: _handleSignIn,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                       elevation: 2,
                     ),
                     child: const Text(
                       "Sign in",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
@@ -271,14 +313,23 @@ class _SignInScreenState extends State<SignInScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 60, height: 60,
-                          child: CircularProgressIndicator(color: primaryColor, strokeWidth: 5),
+                          width: 60,
+                          height: 60,
+                          child: CircularProgressIndicator(
+                            color: primaryColor,
+                            strokeWidth: 5,
+                          ),
                         ),
                         const SizedBox(height: 30),
                         const Text(
                           "Sign in...",
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black, decoration: TextDecoration.none),
-                        )
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -292,10 +343,18 @@ class _SignInScreenState extends State<SignInScreen> {
 
   // --- Helper Widgets ---
   Widget _buildLabel(String text) {
-    return Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14));
+    return Text(
+      text,
+      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+    );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String hint, required IconData icon, bool isPassword = false}) {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    bool isPassword = false,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[50],
@@ -315,7 +374,10 @@ class _SignInScreenState extends State<SignInScreen> {
           contentPadding: const EdgeInsets.symmetric(vertical: 16),
           suffixIcon: isPassword
               ? IconButton(
-                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey[500]),
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey[500],
+                  ),
                   onPressed: () {
                     setState(() {
                       _obscurePassword = !_obscurePassword;

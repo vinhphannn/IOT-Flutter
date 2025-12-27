@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/device_model.dart';
-import 'bodies/light_control_body.dart'; // Import file ruột đèn
+import '../../services/house_service.dart';
+// import 'bodies/light_control_body.dart'; // Tạm thời comment vì chưa có file này
 
 class DeviceControlScreen extends StatefulWidget {
   final Device device;
@@ -13,11 +14,39 @@ class DeviceControlScreen extends StatefulWidget {
 
 class _DeviceControlScreenState extends State<DeviceControlScreen> {
   late bool _isDeviceOn;
+  bool _isLoading = false; // Để hiện loading khi đang gọi API
 
   @override
   void initState() {
     super.initState();
     _isDeviceOn = widget.device.isOn;
+  }
+
+  // Hàm gọi API Bật/Tắt
+  Future<void> _toggleDevice(bool value) async {
+    setState(() {
+      _isDeviceOn = value;
+      _isLoading = true;
+    });
+
+    try {
+      // Gọi API Backend
+      bool success = await HouseService().toggleDevice(widget.device.id, value);
+      
+      if (success) {
+        // Nếu thành công, cập nhật luôn vào object device để khi back về Home nó cập nhật theo
+        widget.device.isOn = value; 
+      } else {
+        // Nếu thất bại, quay về trạng thái cũ
+        setState(() => _isDeviceOn = !value);
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lỗi kết nối!")));
+      }
+    } catch (e) {
+      debugPrint("Lỗi toggle: $e");
+      setState(() => _isDeviceOn = !value);
+    } finally {
+      if(mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -34,20 +63,14 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          "Control Device",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        title: Text(
+          widget.device.name,
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.black),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: Column(
         children: [
-          // 1. THÔNG TIN THIẾT BỊ (HEADER DÙNG CHUNG)
+          // 1. HEADER (Thông tin & Nút Switch To)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             child: Row(
@@ -55,7 +78,6 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
               children: [
                 Row(
                   children: [
-                    // Icon thiết bị
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
@@ -67,70 +89,58 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
                       children: [
                         Text(widget.device.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                         const SizedBox(height: 4),
-                        Text(widget.device.room, style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                        Text(widget.device.roomName, style: TextStyle(color: Colors.grey[500], fontSize: 14)),
                       ],
                     ),
                   ],
                 ),
                 
-                // Nút Bật/Tắt to
-                Transform.scale(
-                  scale: 1.2,
-                  child: Switch(
-                    value: _isDeviceOn,
-                    activeColor: Colors.white,
-                    activeTrackColor: primaryColor,
-                    onChanged: (val) => setState(() => _isDeviceOn = val),
-                  ),
-                ),
+                // Nút Switch
+                widget.device.isSwitchable 
+                ? Transform.scale(
+                    scale: 1.2,
+                    child: Switch(
+                      value: _isDeviceOn,
+                      activeColor: Colors.white,
+                      activeTrackColor: primaryColor,
+                      onChanged: _isLoading ? null : _toggleDevice, // Disable khi đang load
+                    ),
+                  )
+                : const SizedBox(), // Nếu thiết bị không bật tắt được (Sensor) thì ẩn nút
               ],
             ),
           ),
 
           const Divider(height: 30, thickness: 1, color: Color(0xFFF5F5F5)),
 
-          // 2. PHẦN RUỘT (THAY ĐỔI THEO LOẠI THIẾT BỊ)
+          // 2. BODY (Hiển thị chi tiết theo loại)
           Expanded(
             child: _buildBodyContent(),
-          ),
-
-          // 3. NÚT SCHEDULE (DÙNG CHUNG Ở DƯỚI CÙNG)
-          Container(
-            padding: const EdgeInsets.all(24),
-            child: SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Mở trang hẹn giờ (Làm sau)
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEFEFEF), // Màu xám xanh nhạt như thiết kế
-                  foregroundColor: const Color(0xFF4B6EF6), // Chữ màu xanh
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                ),
-                child: const Text("Schedule Automatic ON/OFF", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-            ),
           ),
         ],
       ),
     );
   }
 
-  // Hàm quyết định hiển thị ruột nào
   Widget _buildBodyContent() {
-    switch (widget.device.type) {
-      case 'Light':
-        return const LightControlBody(); // Gọi file ruột đèn
-      
-      case 'AC':
-        // return const ACControlBody(); // Sau này làm thêm file này
-        return const Center(child: Text("AC Control Coming Soon"));
-        
-      default:
-        return const Center(child: Text("Generic Control"));
-    }
+    // Tạm thời hiển thị text đơn giản vì chưa có file `LightControlBody`
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(widget.device.icon, size: 100, color: _isDeviceOn ? Colors.amber : Colors.grey[300]),
+          const SizedBox(height: 20),
+          Text(
+            _isDeviceOn ? "DEVICE IS ON" : "DEVICE IS OFF",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+          ),
+          if (widget.device.type == 'SENSOR')
+            const Padding(
+              padding: EdgeInsets.only(top: 20),
+              child: Text("Giá trị cảm biến: 25°C (Demo)", style: TextStyle(fontSize: 18)),
+            )
+        ],
+      ),
+    );
   }
 }
