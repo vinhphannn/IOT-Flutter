@@ -73,4 +73,20 @@ class ApiClient {
       return false; // Không kết nối được
     }
   }
+
+  // Thêm vào trong class ApiClient ở file lib/services/api_client.dart
+static Future<http.Response> put(String endpoint, Map<String, dynamic> body) async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('jwt_token');
+
+  final response = await http.put(
+    Uri.parse('${AppConfig.baseUrl}$endpoint'),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    },
+    body: jsonEncode(body),
+  );
+  return response;
+}
 }

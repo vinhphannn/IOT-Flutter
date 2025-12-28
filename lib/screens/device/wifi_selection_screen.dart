@@ -1,11 +1,9 @@
 import 'dart:convert';
-import 'dart:io'; // Để check Platform (Android/iOS)
+import 'dart:io'; 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
-import '../../config/app_config.dart';
 import '../../routes.dart';
+import '../../models/device_model.dart';
 
 // UUID Phải khớp với Code ESP32
 const String SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
@@ -30,11 +28,10 @@ class WifiSelectionScreen extends StatefulWidget {
 
 class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
   bool _isLoading = true;
-  String _statusMessage = "Đang đọc danh sách Wifi..."; // Biến hiển thị trạng thái
+  String _statusMessage = "Đang đọc danh sách Wifi..."; 
   List<String> _wifiList = [];
   
-  BluetoothCharacteristic? _credCharacteristic; // Để ghi SSID/Pass hoặc lệnh SCAN
-
+  BluetoothCharacteristic? _credCharacteristic; 
   final TextEditingController _passController = TextEditingController();
   String? _selectedSsid;
 
@@ -47,7 +44,6 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
   // 1. Tìm Service, Đọc Wifi và Đăng ký nhận thông báo (Notify)
   Future<void> _discoverServices() async {
     try {
-      // Android cần xin MTU cao hơn để nhận chuỗi JSON dài
       if (Platform.isAndroid) {
         await widget.device.requestMtu(512);
       }
@@ -65,13 +61,11 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
             
             // Tìm Characteristic để ĐỌC & NOTIFY (Nhận List Wifi & Trạng thái)
             if (c.uuid.toString() == CHAR_WIFI_LIST_UUID) {
-              // A. Đăng ký lắng nghe (Notify)
               await c.setNotifyValue(true);
               c.lastValueStream.listen((value) {
                 _handleNotify(value);
               });
 
-              // B. Đọc dữ liệu lần đầu
               List<int> value = await c.read();
               _handleNotify(value);
             }
@@ -97,11 +91,10 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
     String data = utf8.decode(value);
     debugPrint(">>> BLE Notify: $data");
 
-    // Xử lý các trạng thái từ ESP32
     if (data == "CONNECTING") {
       setState(() => _statusMessage = "Thiết bị đang thử kết nối Wifi...");
     } else if (data == "SUCCESS") {
-      // ESP32 báo đã có Wifi -> Giờ mới gọi API Server
+      // ESP32 báo thành công -> Hiển thị thông báo và về Home
       _onWifiConnectedSuccess();
     } else if (data == "FAIL") {
       setState(() {
@@ -119,16 +112,16 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
             _wifiList = _wifiList.toSet().toList(); // Xóa trùng
             _wifiList.removeWhere((element) => element.isEmpty);
             
-            _isLoading = false; // Đã tải xong danh sách
+            _isLoading = false; 
           });
         }
       } catch (e) {
-        // Dữ liệu không phải JSON (có thể là rác hoặc chưa đủ gói, bỏ qua)
+        // Bỏ qua nếu không phải JSON
       }
     }
   }
 
-  // 2. Gửi SSID/Pass xuống ESP32 (Chỉ gửi BLE, KHÔNG gọi API ngay)
+  // 2. Gửi SSID/Pass xuống ESP32
   Future<void> _sendConfig() async {
     if (_selectedSsid == null) {
       _showError("Vui lòng chọn một mạng Wifi!");
@@ -139,7 +132,6 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
       return;
     }
 
-    // Ẩn bàn phím
     FocusScope.of(context).unfocus();
 
     setState(() {
@@ -155,11 +147,8 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
         };
         String jsonConfig = jsonEncode(config);
         
-        // Gửi xuống ESP
         await _credCharacteristic!.write(utf8.encode(jsonConfig));
-        debugPrint("Đã gửi thông tin Wifi. Đợi ESP phản hồi...");
-        
-        // QUAN TRỌNG: Không disconnect ở đây. Đợi Notify "SUCCESS" hoặc "FAIL".
+        debugPrint("Đã gửi thông tin Wifi.");
       }
     } catch (e) {
       _showError("Lỗi gửi dữ liệu: $e");
@@ -167,26 +156,55 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
     }
   }
 
-  // 3. Hàm gọi API Bind (Chỉ chạy khi nhận được "SUCCESS" từ ESP)
-// Trong file wifi_selection_screen.dart
-
-  // 3. Xử lý khi Wifi kết nối thành công
-  Future<void> _onWifiConnectedSuccess() async {
+  // 3. Xử lý khi Wifi kết nối thành công (Logic mới gọn nhẹ)
+Future<void> _onWifiConnectedSuccess() async {
     setState(() => _statusMessage = "Cấu hình hoàn tất!");
 
-    // Vì thiết bị đã được lưu ở màn hình trước (DeviceSetupScreen)
-    // Nên giờ chỉ cần ngắt kết nối BLE và báo tin vui thôi.
-    
     try {
-      await widget.device.disconnect(); // Ngắt BLE để ESP chạy Wifi
+      await widget.device.disconnect(); // Ngắt BLE
     } catch (e) {
       debugPrint("Lỗi ngắt kết nối: $e");
     }
 
     if (mounted) {
-      _showSuccessDialog();
+      // Tạo đối tượng Device để truyền sang màn hình Success
+      // (Lưu ý: ID và RoomName có thể lấy tạm vì màn hình Success chủ yếu cần Tên & Loại để hiển thị)
+      Device newDevice = Device(
+        id: 0, // ID thật đã lưu ở Backend, ở đây để tạm 0 để hiển thị UI
+        name: widget.deviceType, 
+        macAddress: widget.macAddress,
+        type: "RELAY", // Hoặc mapping từ widget.deviceType nếu cần
+        isOn: true,    // Mặc định là đang bật vì vừa kết nối xong
+        roomName: "Smart Home", // Có thể cập nhật sau
+      );
+
+      // Điều hướng sang trang ConnectedSuccess
+      Navigator.pushReplacementNamed(
+        context,
+        AppRoutes.connectedSuccess, // Tên route vợ đã định nghĩa
+        arguments: newDevice,       // Truyền object device sang
+      );
     }
   }
+  // 4. Hàm Refresh
+  Future<void> _refreshWifi() async {
+    setState(() {
+      _isLoading = true;
+      _statusMessage = "Đang yêu cầu quét lại Wifi...";
+      _wifiList.clear();
+    });
+
+    try {
+      if (_credCharacteristic != null) {
+        await _credCharacteristic!.write(utf8.encode("SCAN"));
+      }
+    } catch (e) {
+      _showError("Lỗi refresh: $e");
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // --- UI COMPONENTS ---
 
   void _showSuccessDialog() {
     showDialog(
@@ -198,8 +216,7 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(ctx); // Đóng Dialog
-              // Về thẳng trang chủ, xóa hết lịch sử setup
+              Navigator.pop(ctx); 
               Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false); 
             },
             child: const Text("Về Trang Chủ", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -208,26 +225,6 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
       ),
     );
   }
-
-  // 4. Hàm Refresh (Quét lại Wifi)
-  Future<void> _refreshWifi() async {
-    setState(() {
-      _isLoading = true;
-      _statusMessage = "Đang yêu cầu quét lại Wifi...";
-      _wifiList.clear();
-    });
-
-    try {
-      if (_credCharacteristic != null) {
-        // Gửi lệnh "SCAN" xuống ESP (ESP sẽ quét và gửi lại list mới qua Notify)
-        await _credCharacteristic!.write(utf8.encode("SCAN"));
-      }
-    } catch (e) {
-      _showError("Lỗi refresh: $e");
-      setState(() => _isLoading = false);
-    }
-  }
-
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
@@ -239,7 +236,6 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
       appBar: AppBar(
         title: const Text("Cấu hình Wifi"),
         actions: [
-          // Nút Refresh xịn xò
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : _refreshWifi,
@@ -294,7 +290,6 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
 
                   const SizedBox(height: 20),
                   
-                  // Ô nhập mật khẩu
                   TextField(
                     controller: _passController,
                     obscureText: true,
@@ -308,12 +303,11 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
                   
                   const SizedBox(height: 30),
                   
-                  // Nút Kết nối
                   SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _sendConfig, // Disable khi đang xử lý
+                      onPressed: _isLoading ? null : _sendConfig,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,

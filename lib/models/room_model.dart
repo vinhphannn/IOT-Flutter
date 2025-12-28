@@ -1,12 +1,8 @@
 class Room {
   final int id;
   final String name;
-  // final int houseId; // Nếu cần dùng sau này
 
-  Room({
-    required this.id,
-    required this.name,
-  });
+  Room({required this.id, required this.name});
 
   factory Room.fromJson(Map<String, dynamic> json) {
     return Room(
