@@ -20,65 +20,64 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
 
-void _handleSignUp() async {
-    // 1. VALIDATE (Giữ nguyên như cũ)
+// --- HÀM XỬ LÝ ĐĂNG KÝ (NÂNG CẤP) ---
+  void _handleSignUp() async {
+    // 1. VALIDATE (Giữ nguyên)
     if (!_isChecked) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please agree to Terms & Conditions first!"), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please agree to Terms & Conditions first!"), backgroundColor: Colors.red));
       return;
     }
 
     if (_emailController.text.isEmpty || _passController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter Email and Password."), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter Email and Password."), backgroundColor: Colors.red));
       return;
     }
 
-    // 2. LOGIC GỌI API
-    setState(() {
-      _isLoading = true; // Bật loading
-    });
+    // 2. Bật Loading
+    setState(() => _isLoading = true);
 
-    // --- ĐOẠN NÀY LÀ CỐT LÕI MỚI ---
+    // 3. GỌI API ĐĂNG KÝ
     AuthService authService = AuthService();
-    bool success = await authService.register(
+    bool registerSuccess = await authService.register(
       _emailController.text, 
       _passController.text
     );
-    // -------------------------------
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false; // Tắt loading
-      });
+    if (registerSuccess) {
+      // --- NÂNG CẤP: TỰ ĐỘNG ĐĂNG NHẬP LUÔN ---
+      // Thay vì bắt user nhập lại pass, mình gọi luôn hàm Login
+      Map<String, dynamic>? loginResult = await authService.login(
+        _emailController.text, 
+        _passController.text
+      );
 
-      if (success) {
-        // Đăng ký thành công -> Thông báo và chuyển sang trang Đăng nhập
-        // (Lưu ý: Đăng ký xong thường phải đăng nhập lại để lấy Token)
+      if (loginResult != null && mounted) {
+        // Đăng nhập thành công -> Chuyển sang Setup luôn (Vì mới đăng ký thì chắc chắn chưa có nhà)
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Đăng ký thành công! Hãy đăng nhập."),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text("Account created! Let's setup your home."), backgroundColor: Colors.green)
         );
         
-        // Chuyển hướng về trang Sign In thay vì Setup
-        // Vì Setup cần Token, mà Đăng ký xong chưa có Token ngay.
-        Navigator.pushReplacementNamed(context, AppRoutes.signIn);
-      } else {
-        // Đăng ký thất bại (VD: Trùng email)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Đăng ký thất bại! Email có thể đã tồn tại."),
-            backgroundColor: Colors.red,
-          ),
+        Navigator.pushNamedAndRemoveUntil(
+          context, 
+          AppRoutes.signUpSetup, // Vào thẳng Setup
+          (route) => false
         );
+      } else {
+        // Nếu tự động đăng nhập lỗi -> Đá về trang Sign In để họ tự nhập
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registration successful! Please login."), backgroundColor: Colors.green));
+          Navigator.pushReplacementNamed(context, AppRoutes.signIn);
+        }
+      }
+    } else {
+      // Đăng ký thất bại
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registration Failed! Email might be taken."), backgroundColor: Colors.red));
       }
     }
-  }
 
+    if (mounted) setState(() => _isLoading = false);
+  }
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;

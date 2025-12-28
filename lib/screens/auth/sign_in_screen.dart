@@ -4,6 +4,9 @@ import 'dart:ui';
 import '../../widgets/social_button.dart';
 import '../../routes.dart';
 import '../../services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Thêm cái này
+import '../../services/house_service.dart'; // Thêm cái này
+import '../../models/house_model.dart'; // Thêm cái này (nếu cần dùng model House)
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -23,79 +26,70 @@ class _SignInScreenState extends State<SignInScreen> {
   final TextEditingController _passController = TextEditingController();
 
   // --- HÀM XỬ LÝ ĐĂNG NHẬP (NÃO BỘ) ---
+  // --- HÀM XỬ LÝ ĐĂNG NHẬP (LOGIC CHUẨN) ---
   void _handleSignIn() async {
-    // 1. Validate
+    // 1. Validate (Giữ nguyên)
     if (_emailController.text.isEmpty || _passController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter Email and Password."),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter Email and Password."), backgroundColor: Colors.red));
       return;
     }
 
     // 2. Bật Loading
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     // 3. GỌI API LOGIN
     AuthService authService = AuthService();
-    // Lưu ý: Hàm login giờ trả về Map (chứa isSetup) hoặc null
-    Map<String, dynamic>? result = await authService.login(
+    
+    // Giả sử hàm login trong AuthService chỉ trả về Token hoặc true/false
+    // Hoặc trả về Map nhưng ta chỉ quan tâm nó thành công hay không
+    Map<String, dynamic>? loginResult = await authService.login(
       _emailController.text,
       _passController.text,
     );
-    //test xoa khi khong dung
-    // Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false; // Tắt loading
-      });
+    if (loginResult != null) {
+      // --- 4. LOGIN THÀNH CÔNG -> GỌI TIẾP API HOUSE ĐỂ CHECK SETUP ---
+      try {
+        // Lưu token xong rồi, giờ kiểm tra xem user này có nhà chưa
+        HouseService houseService = HouseService();
+        final houses = await houseService.fetchMyHouses();
+        
+        final prefs = await SharedPreferences.getInstance();
 
-      if (result != null) {
-        // --- 4. LOGIN THÀNH CÔNG -> KIỂM TRA SETUP ---
-        bool isSetup = result['isSetup'] ?? false; // Lấy cờ từ Backend
+        if (houses.isNotEmpty) {
+          // A. ĐÃ CÓ NHÀ -> Vào Home
+          await prefs.setBool('is_setup_completed', true);
+          
+          // Lưu ID nhà mặc định luôn
+          await prefs.setInt('currentHouseId', houses[0].id);
 
-        if (isSetup) {
-          // A. Đã có nhà -> Vào Dashboard
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Welcome back!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            AppRoutes.home,
-            (route) => false,
-          );
+          if (mounted) {
+            Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Welcome back! 👋"), backgroundColor: Colors.green));
+          }
         } else {
-          // B. Chưa có nhà -> Sang trang Setup ngay
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Let's setup your smart home!"),
-              backgroundColor: Colors.blue,
-            ),
-          );
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            AppRoutes.signUpSetup,
-            (route) => false,
-          );
+          // B. CHƯA CÓ NHÀ -> Vào Setup
+          await prefs.setBool('is_setup_completed', false);
+          
+          if (mounted) {
+            Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Let's set up your home! 🏠"), backgroundColor: Colors.blue));
+          }
         }
-      } else {
-        // 5. Thất bại -> Báo lỗi
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Login Failed! Please check your email or password."),
-            backgroundColor: Colors.red,
-          ),
-        );
+      } catch (e) {
+        // Lỗi khi gọi API House (Mạng lag, Server lỗi...)
+        debugPrint("Error checking setup status: $e");
+        // Fallback: Cho vào Home luôn hoặc báo lỗi tùy em, ở đây anh cho vào Setup cho an toàn
+        if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
+      }
+    } else {
+      // 5. Login Thất bại
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Login Failed! Incorrect email or password."), backgroundColor: Colors.red));
       }
     }
+
+    if (mounted) setState(() => _isLoading = false);
   }
 
   @override

@@ -24,31 +24,24 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
 
   // Hàm gọi API Bật/Tắt
   Future<void> _toggleDevice(bool value) async {
-    setState(() {
-      _isDeviceOn = value;
-      _isLoading = true;
-    });
+    setState(() { _isDeviceOn = value; _isLoading = true; });
 
     try {
-      // Gọi API Backend
-      bool success = await HouseService().toggleDevice(widget.device.id, value);
+      // SỬA LỖI Ở ĐÂY: .toString()
+      bool success = await HouseService().toggleDevice(widget.device.id.toString(), value);
       
       if (success) {
-        // Nếu thành công, cập nhật luôn vào object device để khi back về Home nó cập nhật theo
-        widget.device.isOn = value; 
+        widget.device.isOn = value;
       } else {
-        // Nếu thất bại, quay về trạng thái cũ
         setState(() => _isDeviceOn = !value);
         if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lỗi kết nối!")));
       }
     } catch (e) {
-      debugPrint("Lỗi toggle: $e");
       setState(() => _isDeviceOn = !value);
     } finally {
       if(mounted) setState(() => _isLoading = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;

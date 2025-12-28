@@ -6,14 +6,10 @@ import '../../models/device_model.dart';
 import '../../services/house_service.dart';
 
 class DeviceCard extends StatefulWidget {
+  // ... giữ nguyên
   final Device device;
-  final bool showRoomInfo; 
-
-  const DeviceCard({
-    super.key,
-    required this.device,
-    this.showRoomInfo = false,
-  });
+  final bool showRoomInfo;
+  const DeviceCard({super.key, required this.device, this.showRoomInfo = false});
 
   @override
   State<DeviceCard> createState() => _DeviceCardState();
@@ -29,15 +25,16 @@ class _DeviceCardState extends State<DeviceCard> {
     _isOn = widget.device.isOn;
   }
 
-  // Hàm toggle nhanh ngay trên Card
   Future<void> _toggleQuick(bool value) async {
     setState(() { _isOn = value; _isLoading = true; });
     try {
-      bool success = await HouseService().toggleDevice(widget.device.id, value);
+      // SỬA LỖI Ở ĐÂY: .toString() để chuyển int thành String
+      bool success = await HouseService().toggleDevice(widget.device.id.toString(), value);
+      
       if (success) {
         widget.device.isOn = value;
       } else {
-        setState(() => _isOn = !value); // Revert
+        setState(() => _isOn = !value);
       }
     } catch (e) {
       setState(() => _isOn = !value);
