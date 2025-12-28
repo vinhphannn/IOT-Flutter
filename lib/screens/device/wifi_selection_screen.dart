@@ -168,48 +168,45 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
   }
 
   // 3. Hàm gọi API Bind (Chỉ chạy khi nhận được "SUCCESS" từ ESP)
+// Trong file wifi_selection_screen.dart
+
+  // 3. Xử lý khi Wifi kết nối thành công
   Future<void> _onWifiConnectedSuccess() async {
-    setState(() => _statusMessage = "Đang thêm thiết bị vào tài khoản...");
+    setState(() => _statusMessage = "Cấu hình hoàn tất!");
 
+    // Vì thiết bị đã được lưu ở màn hình trước (DeviceSetupScreen)
+    // Nên giờ chỉ cần ngắt kết nối BLE và báo tin vui thôi.
+    
     try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString('jwt_token');
-      // Lấy ID phòng mặc định là 1 (Vợ có thể sửa logic lấy phòng ở đây)
-      int roomId = 1; 
-
-      // Gọi API Bind
-      final response = await http.post(
-        Uri.parse('${AppConfig.baseUrl}/devices/bind'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          "name": widget.deviceType,
-          "type": widget.deviceType,
-          "macAddress": widget.macAddress,
-          "roomId": roomId
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        // Bind thành công -> Ngắt kết nối BLE để ESP rảnh tay
-        await widget.device.disconnect();
-        
-        if (mounted) {
-          _showSuccessDialog();
-        }
-      } else {
-        throw Exception("Server lỗi: ${response.body}");
-      }
-
+      await widget.device.disconnect(); // Ngắt BLE để ESP chạy Wifi
     } catch (e) {
-      debugPrint("Lỗi Bind: $e");
-      if (mounted) {
-        _showError("Lỗi Server: $e");
-        setState(() => _isLoading = false);
-      }
+      debugPrint("Lỗi ngắt kết nối: $e");
     }
+
+    if (mounted) {
+      _showSuccessDialog();
+    }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Thành công mỹ mãn! 🎉"),
+        content: const Text("Thiết bị đã được lưu vào hệ thống và kết nối Wifi thành công."),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Đóng Dialog
+              // Về thẳng trang chủ, xóa hết lịch sử setup
+              Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false); 
+            },
+            child: const Text("Về Trang Chủ", style: TextStyle(fontWeight: FontWeight.bold)),
+          )
+        ],
+      ),
+    );
   }
 
   // 4. Hàm Refresh (Quét lại Wifi)
@@ -231,27 +228,6 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
     }
   }
 
-  // --- UI COMPONENTS ---
-
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Thành công! 🎉"),
-        content: const Text("Thiết bị đã kết nối Wifi và được thêm vào nhà của bạn."),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx); // Đóng Dialog
-              Navigator.popUntil(context, (route) => route.settings.name == AppRoutes.home); // Về Home
-            },
-            child: const Text("Về trang chủ", style: TextStyle(fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
-  }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));

@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:io'; // Import để check Platform
+import 'dart:io'; 
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart'; // <--- 1. IMPORT CÁI NÀY
 
 import '../../routes.dart';
-import 'wifi_selection_screen.dart'; 
+import 'device_setup_screen.dart'; 
 
 class QRScanScreen extends StatefulWidget {
   const QRScanScreen({super.key});
@@ -38,8 +39,6 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
     _animation = Tween<double>(begin: 0.0, end: 1.0).animate(_animationController);
-
-    // Kiểm tra quyền Camera ngay khi mở (nhưng check khéo léo)
     _checkCameraPermission();
   }
 
@@ -50,25 +49,15 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
     super.dispose();
   }
 
-  // ==========================================
-  // PHẦN 1: LOGIC QUYỀN CAMERA (TỐI ƯU UX)
-  // ==========================================
-
+  // ... (Giữ nguyên phần logic Camera Permission như cũ) ...
   Future<void> _checkCameraPermission() async {
-    // 1. Kiểm tra trạng thái hiện tại trước
     var status = await Permission.camera.status;
-
-    // 2. Nếu đã cho phép rồi -> RETURN LUÔN, không làm phiền user
     if (status.isGranted) return;
-
-    // 3. Nếu chưa cho phép -> Mới xin
     if (status.isDenied) {
-      if (await Permission.camera.request().isGranted) return; // Xin được thì thôi
+      if (await Permission.camera.request().isGranted) return;
     }
-
-    // 4. Nếu bị từ chối vĩnh viễn hoặc từ chối -> Mới hiện Dialog của mình
     if (mounted) {
-       _showPermissionDialog("Camera", "Vui lòng cấp quyền Camera trong Cài đặt để quét mã QR.");
+       _showPermissionDialog("Camera", "Vui lòng cấp quyền Camera để quét mã QR.");
     }
   }
 
@@ -82,17 +71,11 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
         actions: [
           TextButton(
             child: const Text("Để sau", style: TextStyle(color: Colors.grey)),
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pop(context); 
-            },
+            onPressed: () { Navigator.pop(ctx); Navigator.pop(context); },
           ),
           TextButton(
             child: const Text("Mở Cài Đặt", style: TextStyle(fontWeight: FontWeight.bold)),
-            onPressed: () {
-              Navigator.pop(ctx);
-              openAppSettings(); // Mở cài đặt hệ thống
-            },
+            onPressed: () { Navigator.pop(ctx); openAppSettings(); },
           ),
         ],
       ),
@@ -100,7 +83,45 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
   }
 
   // ==========================================
-  // PHẦN 2: LOGIC QUÉT & BLUETOOTH (TỐI ƯU UX)
+  // PHẦN MỚI: CHỌN ẢNH TỪ THƯ VIỆN
+  // ==========================================
+ // ==========================================
+  // SỬA HÀM CHỌN ẢNH TỪ THƯ VIỆN
+  // ==========================================
+  Future<void> _pickImageFromGallery() async {
+    if (_isProcessing) return;
+
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      
+      if (image == null) return; // Người dùng không chọn ảnh
+
+      setState(() => _isProcessing = true);
+      
+      // --- SỬA ĐOẠN NÀY ---
+      // analyzeImage trả về BarcodeCapture? (dữ liệu) chứ không phải bool
+      final BarcodeCapture? capture = await _controller.analyzeImage(image.path);
+
+      if (capture != null && capture.barcodes.isNotEmpty) {
+        // Nếu tìm thấy QR, gọi hàm xử lý _onDetect có sẵn
+        _onDetect(capture);
+      } else {
+        // Nếu capture là null hoặc danh sách rỗng
+        setState(() => _isProcessing = false);
+        if (mounted) _showError("Không tìm thấy mã QR trong ảnh này!");
+      }
+      // ---------------------
+      
+    } catch (e) {
+      debugPrint("Lỗi chọn ảnh: $e");
+      setState(() => _isProcessing = false);
+      if(mounted) _showError("Lỗi khi đọc ảnh.");
+    }
+  }
+
+  // ==========================================
+  // LOGIC XỬ LÝ QR (GIỮ NGUYÊN)
   // ==========================================
 
   void _onDetect(BarcodeCapture capture) async {
@@ -110,9 +131,8 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
     for (final barcode in barcodes) {
       if (barcode.rawValue != null) {
         setState(() => _isProcessing = true);
-        _controller.stop();
+        _controller.stop(); // Dừng camera ngay khi bắt được
         debugPrint('🔍 QR Found: ${barcode.rawValue}');
-        
         await _processQrData(barcode.rawValue!);
         break; 
       }
@@ -125,22 +145,13 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
       String deviceType = data['type'] ?? "DEVICE";
       String macAddress = data['mac'] ?? "";
 
-      // --- LOGIC KIỂM TRA QUYỀN BLUETOOTH (TỐI ƯU) ---
+      // Kiểm tra quyền Bluetooth
       bool isGranted = false;
-
       if (Platform.isIOS) {
-        // A. Kiểm tra trước xem đã có quyền chưa
         var status = await Permission.bluetooth.status;
-        
-        if (status.isGranted) {
-          isGranted = true; // Có rồi thì đi tiếp luôn
-        } else {
-          // Chưa có thì mới xin
-          var requestStatus = await Permission.bluetooth.request();
-          isGranted = requestStatus.isGranted;
-        }
+        if (status.isGranted) isGranted = true;
+        else isGranted = (await Permission.bluetooth.request()).isGranted;
       } else {
-        // Android (Logic cũ)
         Map<Permission, PermissionStatus> statuses = await [
           Permission.bluetoothScan,
           Permission.bluetoothConnect,
@@ -149,19 +160,13 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
         isGranted = !statuses.values.any((s) => s.isDenied || s.isPermanentlyDenied);
       }
 
-      // Nếu sau khi xin mà vẫn không có quyền -> Hiện Dialog hướng dẫn
       if (!isGranted) {
          if (mounted) {
-            _showPermissionDialog(
-              "Bluetooth", 
-              "Ứng dụng cần quyền Bluetooth để tìm thiết bị. Vui lòng bật trong Cài đặt."
-            );
+            _showPermissionDialog("Bluetooth", "Cần quyền Bluetooth để tìm thiết bị.");
             setState(() => _isProcessing = false);
          }
          return;
       }
-
-      // --- NẾU CÓ QUYỀN THÌ CHẠY TIẾP (KHÔNG HIỆN POPUP NỮA) ---
 
       if (!mounted) return;
       showDialog(
@@ -173,18 +178,14 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
               padding: EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 20),
-                  Text("Đang tìm thiết bị..."),
-                ],
+                children: [CircularProgressIndicator(), SizedBox(height: 20), Text("Đang tìm thiết bị...")],
               ),
             ),
           ),
         ),
       );
 
-      // Quét Bluetooth tìm thiết bị theo UUID
+      // Quét Bluetooth
       BluetoothDevice? targetDevice;
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 10),
@@ -200,19 +201,18 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
       });
 
       await Future.delayed(const Duration(seconds: 6));
-      if (FlutterBluePlus.isScanningNow) {
-        await FlutterBluePlus.stopScan();
-      }
+      if (FlutterBluePlus.isScanningNow) await FlutterBluePlus.stopScan();
       subscription.cancel();
 
       if (targetDevice != null) {
         await targetDevice!.connect();
         if (mounted) {
           Navigator.pop(context); // Đóng Loading
+          
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => WifiSelectionScreen(
+              builder: (context) => DeviceSetupScreen(
                 device: targetDevice!, 
                 deviceType: deviceType,
                 macAddress: macAddress,
@@ -222,16 +222,17 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
         }
       } else {
         if (mounted) {
-           Navigator.pop(context); // Đóng Loading
-           _showError("Không tìm thấy thiết bị!");
+           Navigator.pop(context); // Đóng dialog loading
+           _showError("Không tìm thấy thiết bị! Hãy chắc chắn thiết bị đang ở chế độ chờ kết nối.");
         }
       }
 
     } catch (e) {
       debugPrint("❌ Lỗi: $e");
       if (mounted) {
-         if (Navigator.canPop(context)) Navigator.pop(context);
-         _showError("Mã QR lỗi hoặc Bluetooth chưa bật.");
+         // Đóng dialog loading nếu đang mở
+         if (Navigator.canPop(context)) Navigator.pop(context); 
+         _showError("Mã QR không hợp lệ hoặc lỗi kết nối.");
       }
     }
   }
@@ -248,13 +249,9 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
     });
   }
 
-  // ... (Phần Giao diện UI và các Widget con giữ nguyên như cũ) ...
   @override
   Widget build(BuildContext context) {
-    // ... Copy phần UI từ file cũ sang đây ...
-    // (Chồng chỉ gửi phần logic để file đỡ dài, phần UI vợ giữ nguyên nhé)
     final scanAreaSize = MediaQuery.of(context).size.width * 0.7;
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -308,6 +305,7 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
                     children: [
                       IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 28), onPressed: () => Navigator.pop(context)),
                       const Text("Scan Device QR", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      // Nút giả để cân đối tiêu đề
                       const SizedBox(width: 48),
                     ],
                   ),
@@ -315,14 +313,32 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
                 const Spacer(),
                 const Text("Align QR code within the frame", style: TextStyle(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 16),
+                
+                // --- THANH CÔNG CỤ DƯỚI CÙNG (ĐÈN & ẢNH) ---
                 Padding(
                   padding: const EdgeInsets.only(bottom: 40),
-                  child: IconButton(
-                    icon: Icon(_isFlashOn ? Icons.flash_on : Icons.flash_off, color: Colors.white, size: 32),
-                    onPressed: () {
-                      _controller.toggleTorch();
-                      setState(() => _isFlashOn = !_isFlashOn);
-                    },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Nút Chọn Ảnh
+                      _buildControlButton(
+                        icon: Icons.image, 
+                        label: "Gallery",
+                        onTap: _pickImageFromGallery,
+                      ),
+                      
+                      const SizedBox(width: 40), // Khoảng cách
+
+                      // Nút Đèn Flash
+                      _buildControlButton(
+                        icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
+                        label: "Flash",
+                        onTap: () {
+                          _controller.toggleTorch();
+                          setState(() => _isFlashOn = !_isFlashOn);
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -330,6 +346,28 @@ class _QRScanScreenState extends State<QRScanScreen> with SingleTickerProviderSt
           ),
         ],
       ),
+    );
+  }
+
+  // Widget con để vẽ nút tròn đẹp
+  Widget _buildControlButton({required IconData icon, required String label, required VoidCallback onTap}) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(30),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 28),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+      ],
     );
   }
 
