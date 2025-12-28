@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'utils/navigation_service.dart';
 import 'routes.dart';
+import 'config/app_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+  await AppConfig.loadBaseUrl();
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,

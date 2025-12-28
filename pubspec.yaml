@@ -19,6 +19,7 @@ dependencies:
   geolocator: ^10.1.0
   http: ^1.2.0
   image_picker: ^1.0.7
+  stomp_dart_client: ^3.0.1
 
   # Google
   google_sign_in: 6.2.1

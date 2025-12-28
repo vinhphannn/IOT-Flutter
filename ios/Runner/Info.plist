@@ -2,7 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>App cần quyền truy cập mạng cục bộ để điều khiển thiết bị IoT</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+		<string>_websocket._tcp</string>
+	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Ứng dụng cần truy cập thư viện ảnh để quét mã QR.</string>
 

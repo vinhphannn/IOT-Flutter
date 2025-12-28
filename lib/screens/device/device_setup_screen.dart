@@ -81,12 +81,21 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     try {
       // --- CHỖ NÀY ĐÃ SỬA ---
       // Gửi roomId dạng phẳng (số), không lồng object nữa
+// ... đoạn code cũ ...
+      
+      // Gửi roomId dạng phẳng (số), không lồng object nữa
       Map<String, dynamic> payload = {
         "name": _nameController.text,
         "macAddress": widget.macAddress,
-        "type": widget.deviceType,
-        "roomId": _selectedRoomId // <--- Gửi thẳng ID phòng
+        
+        // --- SỬA DÒNG NÀY: Ép sang chữ hoa ---
+        "type": widget.deviceType.toUpperCase(), // Ví dụ: "Relay" -> "RELAY"
+        // -------------------------------------
+        
+        "roomId": _selectedRoomId 
       };
+
+      // ... đoạn code dưới giữ nguyên ...
 
       final response = await ApiClient.post('/devices/bind', payload);
 
