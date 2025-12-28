@@ -20,24 +20,52 @@ class SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: iconColor, size: 28),
-              const SizedBox(height: 12),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 4),
-              Text(subtitle, style: TextStyle(color: Colors.grey[700], fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-            ],
+    // 1. QUAN TRỌNG: Không dùng Expanded ở đây nữa
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Material( // Thêm Material để có hiệu ứng gợn sóng khi bấm
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12), // Giảm padding chút cho đỡ chật
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: iconColor, size: 28),
+                const SizedBox(height: 12),
+                
+                // Tiêu đề (Lighting,...)
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.black87,
+                  ),
+                  maxLines: 1, // Chỉ cho hiện 1 dòng
+                  overflow: TextOverflow.ellipsis, // Dài quá thì ...
+                ),
+                
+                const SizedBox(height: 4),
+                
+                // Phụ đề (3 lights)
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                  maxLines: 1, // Chỉ cho hiện 1 dòng
+                  overflow: TextOverflow.ellipsis, // Dài quá thì ...
+                ),
+              ],
+            ),
           ),
         ),
       ),

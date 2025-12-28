@@ -79,11 +79,13 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // --- CHỖ NÀY ĐÃ SỬA ---
+      // Gửi roomId dạng phẳng (số), không lồng object nữa
       Map<String, dynamic> payload = {
         "name": _nameController.text,
         "macAddress": widget.macAddress,
         "type": widget.deviceType,
-        "room": { "id": _selectedRoomId }
+        "roomId": _selectedRoomId // <--- Gửi thẳng ID phòng
       };
 
       final response = await ApiClient.post('/devices/bind', payload);

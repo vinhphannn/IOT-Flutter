@@ -4,9 +4,10 @@ class Device {
   final int id;
   final String name;
   final String macAddress;
-  final String type;
-  bool isOn;
-  final String roomName; // Đảm bảo tên biến là roomName
+  final String type;      // Loại: RELAY, SOCKET, SENSOR...
+  bool isOn;              // Trạng thái Bật/Tắt
+  final String roomName;  // Tên phòng
+  final bool isWiFi;      // (MỚI) Loại kết nối
 
   Device({
     required this.id,
@@ -15,6 +16,7 @@ class Device {
     required this.type,
     required this.isOn,
     required this.roomName,
+    this.isWiFi = true,   // Mặc định là Wifi
   });
 
   factory Device.fromJson(Map<String, dynamic> json) {
@@ -23,20 +25,37 @@ class Device {
       name: json['name'] ?? "Thiết bị không tên",
       macAddress: json['macAddress'] ?? "",
       type: json['type'] ?? "UNKNOWN",
-      isOn: json['status'] ?? false,
+      
+      // (NÂNG CẤP) Bắt cả trường hợp true/false lẫn "ON"/"OFF"
+      isOn: json['status'] == true || json['status'].toString().toUpperCase() == 'ON',
+      
       roomName: json['room'] != null ? json['room']['name'] : "Chưa có phòng",
+      
+      // (MỚI) Nếu backend chưa trả về field này thì mặc định là true (Wifi)
+      isWiFi: json['connectivity'] == 'BLE' ? false : true, 
     );
   }
 
-  // --- ĐÂY LÀ PHẦN SỬA LỖI "isSwitchable" ---
-  bool get isSwitchable => type == 'RELAY' || type == 'SOCKET' || type == 'FAN';
+  // --- LOGIC XÁC ĐỊNH LOẠI ---
+  // Cảm biến (SENSOR) thì không có nút bật tắt
+  bool get isSwitchable => type != 'SENSOR';
 
-  // --- ĐÂY LÀ PHẦN SỬA LỖI ICON ---
+  // --- LOGIC ICON XỊN XÒ ---
   IconData get icon {
-    switch (type) {
-      case 'RELAY': return Icons.lightbulb_outline;
-      case 'SOCKET': return Icons.power;
-      default: return Icons.devices_other;
+    switch (type.toUpperCase()) {
+      case 'RELAY': 
+      case 'LIGHT':
+        return Icons.lightbulb;
+      case 'SOCKET': 
+        return Icons.power;
+      case 'FAN': 
+        return Icons.mode_fan_off;
+      case 'SENSOR': 
+        return Icons.sensors; // (MỚI) Icon cảm biến
+      case 'TV':
+        return Icons.tv;
+      default: 
+        return Icons.devices_other;
     }
   }
 }

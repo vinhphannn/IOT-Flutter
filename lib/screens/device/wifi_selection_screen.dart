@@ -41,83 +41,102 @@ class _WifiSelectionScreenState extends State<WifiSelectionScreen> {
     _discoverServices();
   }
 
-  // 1. Tìm Service, Đọc Wifi và Đăng ký nhận thông báo (Notify)
+  // Cập nhật hàm này
   Future<void> _discoverServices() async {
     try {
+      // Xin MTU lớn cho Android để nhận chuỗi JSON dài không bị cắt
       if (Platform.isAndroid) {
-        await widget.device.requestMtu(512);
+        await widget.device.requestMtu(512); 
       }
 
       List<BluetoothService> services = await widget.device.discoverServices();
       
       for (var service in services) {
-        if (service.uuid.toString() == SERVICE_UUID) {
+        // CHÚ Ý: Dùng toLowerCase() để so sánh UUID chuẩn xác hơn
+        if (service.uuid.toString().toLowerCase() == SERVICE_UUID.toLowerCase()) {
+          
           for (var c in service.characteristics) {
-            
-            // Tìm Characteristic để GHI (Gửi Wifi hoặc lệnh SCAN)
-            if (c.uuid.toString() == CHAR_CREDENTIALS_UUID) {
+            String charUuid = c.uuid.toString().toLowerCase();
+
+            // 1. Tìm Characteristic GHI
+            if (charUuid == CHAR_CREDENTIALS_UUID.toLowerCase()) {
               _credCharacteristic = c;
+              debugPrint("✅ Đã tìm thấy Char GHI Credentials");
             }
             
-            // Tìm Characteristic để ĐỌC & NOTIFY (Nhận List Wifi & Trạng thái)
-            if (c.uuid.toString() == CHAR_WIFI_LIST_UUID) {
-              await c.setNotifyValue(true);
-              c.lastValueStream.listen((value) {
+            // 2. Tìm Characteristic ĐỌC (LIST WIFI)
+            if (charUuid == CHAR_WIFI_LIST_UUID.toLowerCase()) {
+              debugPrint("✅ Đã tìm thấy Char NHẬN LIST WIFI -> Đang đăng ký Notify...");
+              
+              // QUAN TRỌNG: Lắng nghe trước (Mở tai)
+              final subscription = c.lastValueStream.listen((value) {
                 _handleNotify(value);
               });
+              
+              // Lưu subscription để cancel khi dispose nếu cần (ở đây FlutterBluePlus tự quản lý cũng được)
+              widget.device.cancelWhenDisconnected(subscription);
 
-              List<int> value = await c.read();
-              _handleNotify(value);
+              // Sau đó mới bật Notify (Bảo ESP gửi đi)
+              await c.setNotifyValue(true);
+              
+              // Mẹo: Đọc 1 lần phòng khi ESP đã gửi giá trị trước đó
+              // (Lưu ý: Code C của bạn hàm Read trả về 0, nên dòng này chủ yếu để kích hoạt stream nếu cần)
+              try {
+                await c.read(); 
+              } catch (e) { /* Bỏ qua lỗi read nếu thiết bị không hỗ trợ read trực tiếp */ }
             }
           }
         }
       }
     } catch (e) {
-      debugPrint("Lỗi BLE: $e");
-      if (mounted) {
-         setState(() {
-           _isLoading = false;
-           _statusMessage = "Lỗi kết nối Bluetooth!";
-         });
-         _showError("Không thể đọc dữ liệu từ thiết bị.");
-      }
+      debugPrint("❌ Lỗi BLE Discover: $e");
+      if (mounted) _showError("Lỗi kết nối Bluetooth: $e");
     }
   }
 
-  // Hàm xử lý dữ liệu ESP32 gửi lên
+  // Cập nhật hàm xử lý dữ liệu để in log rõ ràng hơn
   void _handleNotify(List<int> value) {
     if (value.isEmpty) return;
     
-    String data = utf8.decode(value);
-    debugPrint(">>> BLE Notify: $data");
+    // In ra độ dài byte nhận được để debug
+    debugPrint(">>> Nhận được ${value.length} bytes từ ESP32");
 
-    if (data == "CONNECTING") {
-      setState(() => _statusMessage = "Thiết bị đang thử kết nối Wifi...");
-    } else if (data == "SUCCESS") {
-      // ESP32 báo thành công -> Hiển thị thông báo và về Home
-      _onWifiConnectedSuccess();
-    } else if (data == "FAIL") {
-      setState(() {
-        _isLoading = false;
-        _statusMessage = "Kết nối thất bại. Vui lòng thử lại.";
-      });
-      _showError("Sai mật khẩu hoặc sóng yếu!");
-    } else {
-      // Giả sử đây là JSON danh sách Wifi
-      try {
-        List<dynamic> list = jsonDecode(data);
-        if (mounted) {
-          setState(() {
-            _wifiList = list.map((e) => e.toString()).toList();
-            _wifiList = _wifiList.toSet().toList(); // Xóa trùng
-            _wifiList.removeWhere((element) => element.isEmpty);
-            
-            _isLoading = false; 
-          });
+    try {
+      String data = utf8.decode(value);
+      debugPrint(">>> Nội dung String: $data"); // <-- Xem nó in ra cái gì
+
+      if (data == "CONNECTING") {
+        setState(() => _statusMessage = "Thiết bị đang thử kết nối Wifi...");
+      } else if (data == "SUCCESS") {
+        _onWifiConnectedSuccess();
+      } else if (data == "FAIL") {
+        setState(() {
+          _isLoading = false;
+          _statusMessage = "Kết nối thất bại.";
+        });
+        _showError("Sai mật khẩu hoặc sóng yếu!");
+      } else {
+        // JSON List Wifi
+        try {
+          List<dynamic> list = jsonDecode(data);
+          debugPrint(">>> Đã decode JSON thành công: ${list.length} mạng");
+          
+          if (mounted) {
+            setState(() {
+              _wifiList = list.map((e) => e.toString()).toList();
+              _wifiList = _wifiList.toSet().toList();
+              _wifiList.removeWhere((element) => element.isEmpty);
+              _isLoading = false;
+            });
+          }
+        } catch (e) {
+          // QUAN TRỌNG: In lỗi này ra để biết tại sao JSON không parse được
+          debugPrint("⚠️ Lỗi Parse JSON (Có thể gói tin bị cắt): $e");
+          debugPrint("⚠️ Dữ liệu lỗi: $data");
         }
-      } catch (e) {
-        // Bỏ qua nếu không phải JSON
       }
+    } catch (e) {
+      debugPrint("❌ Lỗi UTF8 Decode: $e");
     }
   }
 
