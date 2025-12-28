@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../../routes.dart';
-// Import file này để lấy class DeviceItem (vì mình đã dời nó sang đây)
+import '../../config/app_config.dart';
+import '../../models/device_model.dart'; 
 import 'tabs/nearby_scan_tab.dart'; 
 
 class ConnectDeviceScreen extends StatefulWidget {
@@ -16,56 +19,93 @@ class ConnectDeviceScreen extends StatefulWidget {
 class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
   double _progress = 0.0; 
   Timer? _timer;
-  
-  // Biến kiểm soát trạng thái
-  bool _hasStarted = false; // Đã bấm nút Connect chưa?
-  bool _isConnected = false; // Đã chạy xong 100% chưa?
+  StompClient? stompClient;
+  bool _isConnected = false; 
+
+  @override
+  void initState() {
+    super.initState();
+    _startProgress(); 
+    _initWebSocket(); 
+  }
+
+  void _initWebSocket() {
+    stompClient = StompClient(
+      config: StompConfig(
+        url: AppConfig.webSocketUrl,
+        onConnect: (frame) {
+          // LỖI ĐỎ Ở ĐÂY SẼ HẾT VÌ DEVICEITEM ĐÃ CÓ MACADDRESS
+          final macUpper = widget.device.macAddress.toUpperCase();
+          
+          stompClient!.subscribe(
+            destination: '/topic/device/$macUpper/data',
+            callback: (frame) {
+              if (frame.body != null) {
+                debugPrint("🎯 Tín hiệu từ ESP: Đã nhận data đầu tiên!");
+                _completeConnection(); 
+              }
+            },
+          );
+        },
+        onStompError: (frame) => debugPrint("❌ Lỗi Stomp: ${frame.body}"),
+      ),
+    );
+    stompClient!.activate();
+  }
+
+  void _startProgress() {
+    _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_progress < 0.90) { _progress += 0.01; }
+        });
+      }
+    });
+  }
+
+  void _completeConnection() {
+    if (_isConnected) return;
+    _timer?.cancel();
+    if (mounted) {
+      setState(() {
+        _progress = 1.0; 
+        _isConnected = true; 
+      });
+
+      // KHỚP VỚI MODEL DEVICE MỚI CỦA VỢ
+      Device successDevice = Device(
+        id: 0, 
+        name: widget.device.name,
+        macAddress: widget.device.macAddress,
+        type: widget.device.type, // Lấy từ DeviceItem
+        isOn: true,
+        roomName: "Smart Home",
+        isWiFi: true, // Kết nối qua App thì mặc định là true
+      );
+
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) {
+          Navigator.pushReplacementNamed( 
+            context, 
+            AppRoutes.connectedSuccess, 
+            arguments: successDevice
+          );
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
     _timer?.cancel();
+    stompClient?.deactivate();
     super.dispose();
-  }
-
-  // Hàm bắt đầu chạy giả lập khi bấm nút
-  void _handleConnect() {
-    setState(() {
-      _hasStarted = true; 
-    });
-
-    _timer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      if (mounted) {
-        setState(() {
-          if (_progress < 1.0) {
-            _progress += 0.01; 
-          } else {
-            // --- KHI XONG (100%) ---
-            _progress = 1.0;
-            _isConnected = true; 
-            timer.cancel();
-            
-            // --- TỰ ĐỘNG CHUYỂN TRANG LUÔN ---
-            // Đợi 300ms cho người dùng kịp nhìn thấy số 100%
-            Future.delayed(const Duration(milliseconds: 300), () {
-              if (mounted) {
-                Navigator.pushReplacementNamed( 
-                  context, 
-                  AppRoutes.connectedSuccess, 
-                  arguments: widget.device // Truyền thiết bị sang trang Success
-                );
-              }
-            });
-          }
-        });
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
     final int percentage = (_progress * 100).toInt();
-    final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -73,197 +113,41 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          "Add Device",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
+        leading: const BackButton(color: Colors.black),
+        title: const Text("Connecting", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-          child: Column(
-            children: [
-              // 1. Header Tab giả (Chỉ để hiển thị cho giống quy trình)
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: primaryColor,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text("Nearby Devices", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const Expanded(
-                      child: Text("Add Manual", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: size.height * 0.04),
-
-              const Text(
-                "Connect to device",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              
-              // Badge Wifi/Bluetooth
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 200, height: 200,
+              child: Stack(
+                alignment: Alignment.center,
+                fit: StackFit.expand,
                 children: [
-                  _buildIconBadge(Icons.wifi, primaryColor),
-                  const SizedBox(width: 8),
-                  _buildIconBadge(Icons.bluetooth, primaryColor),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text("Turn on your Wifi & Bluetooth to connect", 
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                ],
-              ),
-
-              const SizedBox(height: 30),
-
-              // Tên thiết bị
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle, color: primaryColor, size: 20),
-                  const SizedBox(width: 8),
-                  Text(widget.device.name, style: const TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w500)),
-                ],
-              ),
-
-              SizedBox(height: size.height * 0.05),
-
-              // 3. VÒNG TRÒN TIẾN TRÌNH HOẶC ẢNH TĨNH
-              SizedBox(
-                width: 250,
-                height: 250,
-                child: Stack(
-                  alignment: Alignment.center,
-                  fit: StackFit.expand,
-                  children: [
-                    // Chỉ hiện vòng tròn loading khi ĐÃ BẤM nút Connect
-                    if (_hasStarted)
-                      CircularProgressIndicator(
-                        value: _progress,
-                        strokeWidth: 12,
-                        backgroundColor: Colors.grey[100],
-                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                        strokeCap: StrokeCap.round, 
-                      ),
-                    
-                    // Hình ảnh thiết bị (Luôn hiện)
-                    Padding(
-                      padding: const EdgeInsets.all(35.0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: _hasStarted ? primaryColor.withOpacity(0.1) : Colors.grey.withOpacity(0.1), 
-                              blurRadius: 20, 
-                              spreadRadius: 5
-                            )
-                          ]
-                        ),
-                        child: Icon(
-                          widget.device.icon, 
-                          size: 100, 
-                          color: _isConnected ? primaryColor : (_hasStarted ? primaryColor : Colors.grey[600])
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: size.height * 0.05),
-
-              // 4. TRẠNG THÁI & NÚT BẤM
-              
-              if (!_hasStarted) ...[
-                // --- TRẠNG THÁI 1: CHƯA KẾT NỐI ---
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: _handleConnect, // Bấm để bắt đầu chạy
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      elevation: 4,
-                      shadowColor: primaryColor.withOpacity(0.3),
-                    ),
-                    child: const Text(
-                      "Connect", 
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)
-                    ),
+                  CircularProgressIndicator(
+                    value: _progress,
+                    strokeWidth: 10,
+                    backgroundColor: Colors.grey[100],
+                    valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                    strokeCap: StrokeCap.round, 
                   ),
-                ),
-              ] else if (!_isConnected) ...[
-                // --- TRẠNG THÁI 2: ĐANG CHẠY % ---
-                const Text(
-                  "Connecting...",
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "$percentage%",
-                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: primaryColor),
-                ),
-                // Ẩn nút khi đang chạy
-                const SizedBox(height: 55), 
-              ] else ...[
-                 // --- TRẠNG THÁI 3: KẾT NỐI XONG ---
-                 // (Không hiển thị nút Done nữa vì đã tự động chuyển trang)
-                 const Text(
-                  "Connected Successfully!",
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 55),
-              ],
-
-              const SizedBox(height: 20),
-              
-              // Text Link
-              if (!_isConnected)
-                TextButton(
-                  onPressed: () {},
-                  child: const Text("Can't connect with your devices? Learn more", style: TextStyle(color: Colors.blue, fontSize: 12)),
-                ),
-              
-              const SizedBox(height: 20),
-            ],
-          ),
+                  Icon(widget.device.icon, size: 80, color: primaryColor),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+            Text("$percentage%", style: TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: primaryColor)),
+            const SizedBox(height: 10),
+            Text(
+              _progress < 0.9 ? "Configuring your device..." : "Waiting for device to go online...",
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
         ),
       ),
-    );
-  }
-
-  Widget _buildIconBadge(IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Icon(icon, size: 14, color: Colors.white),
     );
   }
 }

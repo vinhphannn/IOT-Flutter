@@ -14,14 +14,50 @@ class _ManualAddTabState extends State<ManualAddTab> {
   final List<String> _categories = ["Popular", "Lighting", "Camera", "Electrical", "Sensor", "Lock"];
   int _selectedCategoryIndex = 0;
 
-  // Danh sách thiết bị mẫu (Dùng class DeviceItem từ file nearby_scan_tab.dart)
+  // DANH SÁCH THIẾT BỊ MẪU - Đã fix lỗi thiếu macAddress và type
   final List<DeviceItem> _devices = [
-    DeviceItem(icon: Icons.camera_outdoor, name: "Smart V1 CCTV", color: Colors.grey),
-    DeviceItem(icon: Icons.camera_indoor, name: "Smart Webcam", color: Colors.grey),
-    DeviceItem(icon: Icons.video_camera_front, name: "Smart V2 CCTV", color: Colors.grey),
-    DeviceItem(icon: Icons.lightbulb, name: "Smart Lamp", color: Colors.orange), 
-    DeviceItem(icon: Icons.speaker, name: "Smart Speaker", color: Colors.grey),
-    DeviceItem(icon: Icons.router, name: "Wifi Router", color: Colors.grey),
+    DeviceItem(
+      icon: Icons.camera_outdoor, 
+      name: "Smart V1 CCTV", 
+      color: Colors.grey,
+      macAddress: "", // Thêm thủ công nên tạm để trống
+      type: "CAMERA", // Gán loại tương ứng
+    ),
+    DeviceItem(
+      icon: Icons.camera_indoor, 
+      name: "Smart Webcam", 
+      color: Colors.grey,
+      macAddress: "",
+      type: "CAMERA",
+    ),
+    DeviceItem(
+      icon: Icons.video_camera_front, 
+      name: "Smart V2 CCTV", 
+      color: Colors.grey,
+      macAddress: "",
+      type: "CAMERA",
+    ),
+    DeviceItem(
+      icon: Icons.lightbulb, 
+      name: "Smart Lamp", 
+      color: Colors.orange,
+      macAddress: "",
+      type: "LIGHT",
+    ), 
+    DeviceItem(
+      icon: Icons.speaker, 
+      name: "Smart Speaker", 
+      color: Colors.grey,
+      macAddress: "",
+      type: "SPEAKER",
+    ),
+    DeviceItem(
+      icon: Icons.router, 
+      name: "Wifi Router", 
+      color: Colors.grey,
+      macAddress: "",
+      type: "ROUTER",
+    ),
   ];
 
   @override

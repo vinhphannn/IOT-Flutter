@@ -43,26 +43,44 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white, 
-        elevation: 0, 
+        backgroundColor: Colors.white,
+        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        // SỬA Ở ĐÂY: Thay widget.device.name thành "Control Device"
-        title: const Text(
-          "Control Device", 
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)
+        // ĐƯA TÊN VÀ PHÒNG LÊN ĐÂY
+        title: Column(
+          children: [
+            Text(
+              widget.device.name,
+              style: const TextStyle(
+                color: Colors.black, 
+                fontWeight: FontWeight.bold, 
+                fontSize: 18
+              ),
+            ),
+            Text(
+              widget.device.roomName,
+              style: const TextStyle(
+                color: Colors.grey, 
+                fontSize: 12, 
+                fontWeight: FontWeight.normal
+              ),
+            ),
+          ],
         ),
       ),
       body: Column(
         children: [
-          _buildHeader(), // Tên thiết bị thật sự nằm ở đây này
+          // Đã bỏ hoàn toàn _buildHeader() ở đây
           const Divider(height: 1, thickness: 1, color: Color(0xFFF5F5F5)),
+          
+          // Phần thân chứa các thông số điện năng
           Expanded(child: _buildDeviceBody()), 
           
-          // Chồng thêm cái nút Schedule ở dưới cùng cho giống thiết kế của vợ luôn nhé
+          // Nút hành động dưới cùng
           _buildBottomAction(),
         ],
       ),

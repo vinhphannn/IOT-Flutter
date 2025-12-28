@@ -4,7 +4,7 @@ import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../../../models/device_model.dart';
 import '../../../services/house_service.dart';
 import '../../../config/app_config.dart';
-
+import '../../device/log/device_log_screen.dart'; // Vợ nhớ kiểm tra đường dẫn tới file DeviceLogScreen này nhé
 
 class SocketControlWidget extends StatefulWidget {
   final Device device;
@@ -15,11 +15,9 @@ class SocketControlWidget extends StatefulWidget {
 }
 
 class _SocketControlWidgetState extends State<SocketControlWidget> {
-  // 1. Khai báo biến khớp với Key từ Backend
-  double currentAmpere = 0.0; // Key "I"
-  double currentWatt = 0.0;   // Key "P"
-  double todayKwh = 0.0;      // Key "totalKwh"
-  
+  double currentAmpere = 0.0;
+  double currentWatt = 0.0;
+  double todayKwh = 0.0;
   late StompClient stompClient;
   bool _isProcessing = false;
 
@@ -32,77 +30,53 @@ class _SocketControlWidgetState extends State<SocketControlWidget> {
   void _connectWebSocket() {
     stompClient = StompClient(
       config: StompConfig(
-        url: AppConfig.webSocketUrl, // Thay IP Server của vợ vào đây
+        url: AppConfig.webSocketUrl,
         onConnect: onConnect,
         onStompError: (frame) => debugPrint("Lỗi Stomp: ${frame.body}"),
-        webSocketConnectHeaders: {
-        "transports": ["websocket"],
-      },
+        webSocketConnectHeaders: {"transports": ["websocket"]},
       ),
     );
     stompClient.activate();
   }
 
-void onConnect(StompFrame frame) {
-  final macUpper = widget.device.macAddress.toUpperCase();
-  
-  stompClient.subscribe(
-    destination: '/topic/device/$macUpper/data',
-    callback: (frame) {
-      if (frame.body != null) {
-        // Log để vợ thấy dữ liệu đã vào đến callback
-        debugPrint("DA NHAN TRONG CALLBACK: ${frame.body}");
-        
-        Map<String, dynamic> data = jsonDecode(frame.body!);
-        
-        if (mounted) {
-          setState(() {
-            // 1. Cập nhật Status (On/Off)
-            if (data.containsKey('status')) {
-              widget.device.isOn = data['status'];
-            }
-
-            // 2. Cập nhật Power (W) - Check cả P hoa và p thường
-            var pVal = data['p'] ?? data['P'];
-            if (pVal != null) {
-              currentWatt = double.tryParse(pVal.toString()) ?? 0.0;
-            }
-
-            // 3. Cập nhật Current (A) - Check i thường, I hoa và A hoa
-            var iVal = data['i'] ?? data['I'] ?? data['A'];
-            if (iVal != null) {
-              currentAmpere = double.tryParse(iVal.toString()) ?? 0.0;
-            }
-
-            // 4. Cập nhật Energy (kWh)
-            var kwhVal = data['totalKwh'];
-            if (kwhVal != null) {
-              todayKwh = double.tryParse(kwhVal.toString()) ?? 0.0;
-            }
-          });
+  void onConnect(StompFrame frame) {
+    final macUpper = widget.device.macAddress.toUpperCase();
+    stompClient.subscribe(
+      destination: '/topic/device/$macUpper/data',
+      callback: (frame) {
+        if (frame.body != null) {
+          Map<String, dynamic> data = jsonDecode(frame.body!);
+          if (mounted) {
+            setState(() {
+              if (data.containsKey('status')) {
+                widget.device.isOn = data['status'];
+              }
+              var pVal = data['p'] ?? data['P'];
+              if (pVal != null) currentWatt = double.tryParse(pVal.toString()) ?? 0.0;
+              var iVal = data['i'] ?? data['I'] ?? data['A'];
+              if (iVal != null) currentAmpere = double.tryParse(iVal.toString()) ?? 0.0;
+              var kwhVal = data['totalKwh'];
+              if (kwhVal != null) todayKwh = double.tryParse(kwhVal.toString()) ?? 0.0;
+            });
+          }
         }
-      }
-    },
-  );
-}
+      },
+    );
+  }
 
   Future<void> _handleToggle() async {
     if (_isProcessing) return;
-    
     setState(() {
       _isProcessing = true;
-      // Optimistic UI: Đổi trạng thái ngay lập tức cho mướt
       widget.device.isOn = !widget.device.isOn;
     });
 
     try {
       bool success = await HouseService().toggleDevice(
-        widget.device.id.toString(), 
-        widget.device.isOn
+        widget.device.id.toString(),
+        widget.device.isOn,
       );
-      if (!success) {
-        setState(() => widget.device.isOn = !widget.device.isOn);
-      }
+      if (!success) setState(() => widget.device.isOn = !widget.device.isOn);
     } catch (e) {
       setState(() => widget.device.isOn = !widget.device.isOn);
     } finally {
@@ -120,29 +94,29 @@ void onConnect(StompFrame frame) {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: Container(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // PHẦN 1: NÚT BẤM TRUNG TÂM
-                _buildCentralButton(primaryColor),
+    return LayoutBuilder(builder: (context, constraints) {
+      return SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Container(
+          // Ép chiều cao tối thiểu để Column dãn cách MainAxisAlignment.spaceBetween hoạt động
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          padding: const EdgeInsets.fromLTRB(24, 40, 24, 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // 1. NÚT BẤM TRUNG TÂM (Đã chỉnh lại tỉ lệ cho cân đối)
+              _buildCentralButton(primaryColor),
 
-                // PHẦN 2: CHỈ SỐ THỰC TẾ (Sử dụng dữ liệu từ WebSocket)
-                _buildPowerStats(),
+              // 2. CHỈ SỐ THỰC TẾ
+              _buildPowerStats(),
 
-                // PHẦN 3: THÔNG TIN PHỤ
-                _buildExtraInfo(),
-              ],
-            ),
+              // 3. THÔNG TIN PHỤ
+              _buildExtraInfo(),
+            ],
           ),
-        );
-      },
-    );
+        ),
+      );
+    });
   }
 
   Widget _buildCentralButton(Color primaryColor) {
@@ -153,34 +127,53 @@ void onConnect(StompFrame frame) {
           Stack(
             alignment: Alignment.center,
             children: [
+              // Vòng tròn hiệu ứng lan tỏa
               AnimatedContainer(
                 duration: const Duration(milliseconds: 400),
-                width: widget.device.isOn ? 180 : 160,
-                height: widget.device.isOn ? 180 : 160,
+                width: widget.device.isOn ? 200 : 180,
+                height: widget.device.isOn ? 200 : 180,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: widget.device.isOn 
-                      ? primaryColor.withValues(alpha: 0.15) 
-                      : Colors.grey.withValues(alpha: 0.08),
+                  color: widget.device.isOn
+                      ? primaryColor.withOpacity(0.1)
+                      : Colors.grey.withOpacity(0.05),
+                  border: Border.all(
+                    color: widget.device.isOn 
+                        ? primaryColor.withOpacity(0.2) 
+                        : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+              // Icon nút nguồn
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                padding: const EdgeInsets.all(30),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.device.isOn ? primaryColor : Colors.grey[200],
                   boxShadow: widget.device.isOn ? [
                     BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.2),
-                      blurRadius: 30, spreadRadius: 5,
+                      color: primaryColor.withOpacity(0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     )
                   ] : [],
                 ),
-              ),
-              Icon(
-                Icons.power_settings_new,
-                size: 90,
-                color: widget.device.isOn ? primaryColor : Colors.grey[400],
+                child: Icon(
+                  Icons.power_settings_new,
+                  size: 50,
+                  color: widget.device.isOn ? Colors.white : Colors.grey[500],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 24),
           Text(
-            widget.device.isOn ? "DEVICE IS ON" : "DEVICE IS OFF",
+            widget.device.isOn ? "TRẠNG THÁI: ĐANG BẬT" : "TRẠNG THÁI: ĐANG TẮT",
             style: TextStyle(
+              fontSize: 14,
+              letterSpacing: 1.5,
               color: widget.device.isOn ? primaryColor : Colors.grey,
               fontWeight: FontWeight.bold,
             ),
@@ -192,23 +185,25 @@ void onConnect(StompFrame frame) {
 
   Widget _buildPowerStats() {
     return Container(
+      margin: const EdgeInsets.symmetric(vertical: 20),
       padding: const EdgeInsets.symmetric(vertical: 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 15, offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           )
         ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildStatItem("Current", "${currentAmpere.toStringAsFixed(2)}A", Icons.bolt),
-          Container(width: 1, height: 40, color: Colors.grey[200]),
-          _buildStatItem("Power", "${currentWatt.toStringAsFixed(1)}W", Icons.speed),
+          _buildStatItem("Dòng điện", "${currentAmpere.toStringAsFixed(2)}A", Icons.bolt_rounded),
+          Container(width: 1, height: 40, color: Colors.grey[100]),
+          _buildStatItem("Công suất", "${currentWatt.toStringAsFixed(1)}W", Icons.speed_rounded),
         ],
       ),
     );
@@ -217,10 +212,11 @@ void onConnect(StompFrame frame) {
   Widget _buildStatItem(String label, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, color: Colors.grey[400], size: 22),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 26)),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+        Icon(icon, color: Colors.grey[400], size: 24),
+        const SizedBox(height: 12),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 24)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
     );
   }
@@ -228,35 +224,71 @@ void onConnect(StompFrame frame) {
   Widget _buildExtraInfo() {
     return Column(
       children: [
-        _buildInfoCard(Icons.timer_outlined, "Usage today", "${todayKwh.toStringAsFixed(3)} kWh", Colors.blue),
+        _buildInfoCard(
+          icon: Icons.eco_outlined, 
+          title: "Điện năng hôm nay", 
+          sub: "${todayKwh.toStringAsFixed(3)} kWh", 
+          color: Colors.green,
+          onTap: () {}, // Hiện tại chưa có trang điện năng nên để trống
+        ),
         const SizedBox(height: 12),
-        _buildInfoCard(Icons.history, "History", "View details", Colors.green),
-        const SizedBox(height: 10),
+        _buildInfoCard(
+          icon: Icons.history_rounded, 
+          title: "Lịch sử hoạt động", 
+          sub: "Xem chi tiết", 
+          color: Colors.blue,
+          onTap: () {
+            // SỰ KIỆN NHẤN VÀO ĐỂ CHUYỂN TRANG ĐÂY VỢ ƠI
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DeviceLogScreen(deviceId: widget.device.id),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 20),
       ],
     );
   }
 
-  Widget _buildInfoCard(IconData icon, String title, String sub, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const Spacer(),
-          Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-          const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
-        ],
+  Widget _buildInfoCard({
+    required IconData icon, 
+    required String title, 
+    required String sub, 
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque, // Đảm bảo nhấn vào toàn bộ vùng thẻ đều nhận
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.grey.withOpacity(0.05)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
+          ],
+        ),
       ),
     );
   }

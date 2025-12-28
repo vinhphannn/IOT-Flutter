@@ -3,12 +3,22 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../routes.dart'; // Chú ý đường dẫn import routes (lùi 3 cấp)
 
-// Class Model (Để ở đây hoặc tách ra file model riêng đều được)
+// Class Model (Giữ nguyên cấu trúc đã thống nhất)
 class DeviceItem {
   final IconData icon;
   final String name;
   final Color color;
-  DeviceItem({required this.icon, required this.name, required this.color});
+  final String macAddress;
+  final String type;
+  final dynamic device;
+  DeviceItem({
+    required this.name,
+    required this.icon,
+    required this.color,
+    required this.macAddress,
+    required this.type,
+    this.device,
+  });
 }
 
 class NearbyScanTab extends StatefulWidget {
@@ -24,12 +34,43 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
   List<DeviceItem> _foundDevices = [];
   late AnimationController _rippleController;
 
+  // --- SỬA LỖI TẠI ĐÂY: Thêm macAddress và type cho các thiết bị mẫu ---
   final List<DeviceItem> _mockDevices = [
-    DeviceItem(icon: Icons.lightbulb, name: "Smart Bulb", color: Colors.orange),
-    DeviceItem(icon: Icons.router, name: "Wifi Router", color: Colors.blue),
-    DeviceItem(icon: Icons.speaker, name: "Speaker", color: Colors.red),
-    DeviceItem(icon: Icons.ac_unit, name: "Air Cond", color: Colors.cyan),
-    DeviceItem(icon: Icons.camera_indoor, name: "Camera", color: Colors.purple),
+    DeviceItem(
+      icon: Icons.lightbulb, 
+      name: "Smart Bulb", 
+      color: Colors.orange,
+      macAddress: "00:11:22:33:44:55", // Thêm MAC giả lập
+      type: "LIGHT",                   // Thêm Type
+    ),
+    DeviceItem(
+      icon: Icons.router, 
+      name: "Wifi Router", 
+      color: Colors.blue,
+      macAddress: "AA:BB:CC:DD:EE:FF",
+      type: "ROUTER",
+    ),
+    DeviceItem(
+      icon: Icons.speaker, 
+      name: "Speaker", 
+      color: Colors.red,
+      macAddress: "12:34:56:78:90:AB",
+      type: "SPEAKER",
+    ),
+    DeviceItem(
+      icon: Icons.ac_unit, 
+      name: "Air Cond", 
+      color: Colors.cyan,
+      macAddress: "FE:DC:BA:09:87:65",
+      type: "AC",
+    ),
+    DeviceItem(
+      icon: Icons.camera_indoor, 
+      name: "Camera", 
+      color: Colors.purple,
+      macAddress: "D4:E9:F4:71:99:20", // MAC giống ESP cho vợ test
+      type: "CAMERA",
+    ),
   ];
 
   @override
@@ -65,7 +106,7 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
 
-    return SingleChildScrollView( // Đưa SingleChildScrollView vào đây để nội dung cuộn được
+    return SingleChildScrollView( 
       child: Column(
         children: [
           const SizedBox(height: 20),
@@ -147,7 +188,7 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
                 if (!_isScanning)
                   ...List.generate(_foundDevices.length, (index) {
                     final double angle = (2 * pi / _foundDevices.length) * index - (pi / 2);
-                    final double radius = 110;
+                    const double radius = 110;
 
                     return Positioned(
                       left: 160 + radius * cos(angle) - 25,
