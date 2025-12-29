@@ -34,21 +34,56 @@ class DeviceService {
     }
   }
 
-  // 3. Hàm lấy Lịch sử (Logs) - Có hỗ trợ phân trang
-  Future<List<DeviceLog>> getDeviceLogs(int deviceId, {int page = 0, int size = 20}) async {
-    // API theo format: /api/devices/1/logs?page=0&size=20
-    final String endpoint = '/devices/$deviceId/logs?page=$page&size=$size';
-    
+Future<List<DeviceLog>> getDeviceLogs(int deviceId, {int page = 0, int size = 20}) async {
+    // 1. In ra URL để xem đúng chưa
+    final String endpoint = '/devices/$deviceId/logs?page=$page&size=$size'; 
+    print("🔍 [DEBUG] Đang gọi API: $endpoint");
+
     try {
       final response = await ApiClient.get(endpoint);
+      
+      // 2. In ra Status Code và Dữ liệu thô nhận được
+      print("🔍 [DEBUG] Status Code: ${response.statusCode}");
+      print("🔍 [DEBUG] Body nhận được: ${response.body}");
+
       if (response.statusCode == 200) {
-        List<dynamic> body = jsonDecode(utf8.decode(response.bodyBytes));
-        return body.map((item) => DeviceLog.fromJson(item)).toList();
+        // Giải mã UTF-8 để không lỗi font tiếng Việt
+        final dynamic body = jsonDecode(utf8.decode(response.bodyBytes));
+        
+        List<dynamic> logsList = [];
+
+        // 3. Kiểm tra cấu trúc dữ liệu trả về
+        if (body is List) {
+          print("✅ [DEBUG] Backend trả về dạng LIST (Đúng rồi!)");
+          logsList = body;
+        } else if (body is Map && body.containsKey('content')) {
+          print("✅ [DEBUG] Backend trả về dạng PAGE (Spring Boot)");
+          logsList = body['content'];
+        } else {
+          print("⚠️ [DEBUG] Cấu trúc lạ, không phải List cũng không phải Page: $body");
+          return [];
+        }
+
+        // 4. Thử map từng phần tử xem có lỗi Parse không
+        return logsList.map((item) {
+          try {
+            return DeviceLog.fromJson(item);
+          } catch (e) {
+            print("❌ [DEBUG] Lỗi Parse Item này: $item");
+            print("❌ [DEBUG] Chi tiết lỗi: $e");
+            // Trả về một object rỗng hoặc throw tiếp tùy ý (ở đây mình bỏ qua item lỗi)
+            throw Exception("Parse Error"); 
+          }
+        }).toList();
+
+      } else {
+        print("❌ [DEBUG] API lỗi: ${response.statusCode} - ${response.reasonPhrase}");
+        return [];
       }
-      return [];
     } catch (e) {
-      debugPrint("❌ Lỗi lấy Logs: $e");
+      print("❌ [DEBUG] Lỗi kết nối hoặc Code: $e");
       return [];
     }
   }
+  
 }

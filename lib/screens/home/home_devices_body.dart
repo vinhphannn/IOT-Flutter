@@ -72,10 +72,6 @@ class HomeDevicesBody extends StatelessWidget {
       },
     ];
 
-   // ... (Phần import giữ nguyên)
-
-// ... (Phần khai báo Class và list summaryCategories giữ nguyên)
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -86,21 +82,20 @@ class HomeDevicesBody extends StatelessWidget {
           child: Row(
             children: summaryCategories.map((category) {
               List<String> types = category['types'] as List<String>;
+              // Đếm số lượng thiết bị (Tự động cập nhật nhờ Provider ở cha)
               int count = allDevices.where((d) => types.contains(d.type.toUpperCase())).length;
 
               return Padding(
                 padding: const EdgeInsets.only(right: 12),
-                // Dùng Container thay vì SizedBox để an toàn hơn
                 child: Container(
-                  width: 110, // Chiều rộng cố định
-                  height: 110, // Chiều cao cố định (Hình vuông)
-                  // Thêm ràng buộc để nội dung không bị vỡ layout
+                  width: 110,
+                  height: 110,
                   constraints: const BoxConstraints(minHeight: 100, minWidth: 100), 
                   child: SummaryCard(
                     icon: category['icon'],
                     title: category['title'],
                     subtitle: "$count", 
-                    bgColor: (category['color'] as Color).withOpacity(0.1), // Sửa lỗi deprecated với .withOpacity() hoặc .withValues() đều được
+                    bgColor: (category['color'] as Color).withOpacity(0.1),
                     iconColor: (category['color'] as Color),
                     onTap: () {
                       onCategoryTap(types[0], category['title']);
@@ -112,10 +107,9 @@ class HomeDevicesBody extends StatelessWidget {
           ),
         ),
 
-        // ... (Phần còn lại giữ nguyên)
         const SizedBox(height: 24),
 
-        // --- HEADER DANH SÁCH (GIỮ NGUYÊN) ---
+        // --- HEADER DANH SÁCH ---
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -138,7 +132,7 @@ class HomeDevicesBody extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // --- BỘ LỌC PHÒNG (GIỮ NGUYÊN) ---
+        // --- BỘ LỌC PHÒNG ---
         SizedBox(
           height: 40,
           child: ListView.separated(
@@ -176,20 +170,54 @@ class HomeDevicesBody extends StatelessWidget {
 
         const SizedBox(height: 20),
 
-        // --- GRID THIẾT BỊ (GIỮ NGUYÊN) ---
+// --- GRID THIẾT BỊ ---
         displayDevices.isEmpty
             ? _buildEmptyState(primaryColor, context)
             : GridView.builder(
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.85,
+                  crossAxisCount: 2, 
+                  crossAxisSpacing: 16, 
+                  mainAxisSpacing: 16, 
+                  childAspectRatio: 0.85,
                 ),
                 itemCount: displayDevices.length,
                 itemBuilder: (context, index) {
-                  return DeviceCard(
-                    device: displayDevices[index],
-                    showRoomInfo: selectedRoomIndex == 0,
+                  final device = displayDevices[index];
+                  final isOnline = device.isOnline; 
+
+                  return Stack(
+                    children: [
+                      // 1. Thẻ thiết bị (Mờ đi nhiều hơn chút để nổi bật icon offline)
+                      Opacity(
+                        opacity: isOnline ? 1.0 : 0.4, // Giảm xuống 0.4 cho mờ hẳn
+                        child: DeviceCard(
+                          device: device,
+                          showRoomInfo: selectedRoomIndex == 0,
+                        ),
+                      ),
+
+                      // 2. Icon Wifi gạch chéo TO nằm GIỮA
+                      if (!isOnline)
+                        Positioned.fill( // Phủ kín thẻ để căn giữa
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                // Nền trắng mờ nhẹ để icon nổi bật trên nền thẻ
+                                color: Colors.white.withOpacity(0.6), 
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.cloud_off_rounded, // Hoặc wifi_off_rounded
+                                size: 32, // To rõ ràng
+                                color: Colors.grey[600]!.withOpacity(0.8), // Màu xám đậm mờ mờ cho tinh tế
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   );
                 },
               ),

@@ -111,17 +111,17 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   // 2. Quay lại (Back)
-  void _prevPage() {
+void _prevPage() {
     if (_currentStep > 0) {
       _pageController.previousPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.pop(context);
+      // Thay vì pop (gây màn hình đen), hãy về trang lựa chọn đăng nhập
+      Navigator.pushReplacementNamed(context, AppRoutes.loginOptions);
     }
   }
-
   // 3. Gửi dữ liệu về Backend
   void _submitSetup() async {
     setState(() => _isLoading = true);

@@ -9,6 +9,12 @@ class Device {
   final String roomName;  // Tên phòng
   final bool isWiFi;      // (MỚI) Loại kết nối
 
+// --- THÊM CÁC BIẾN MỚI NÀY ---
+  bool isOnline;      // Trạng thái kết nối
+  double power;       // Công suất (W)
+  double current;     // Dòng điện (A)
+  double totalKwh;    // Tổng tiêu thụ
+
   Device({
     required this.id,
     required this.name,
@@ -17,6 +23,11 @@ class Device {
     required this.isOn,
     required this.roomName,
     this.isWiFi = true,   // Mặc định là Wifi
+    // Khởi tạo mặc định
+    this.isOnline = false ,
+    this.power = 0.0,
+    this.current = 0.0,
+    this.totalKwh = 0.0,
   });
 
   factory Device.fromJson(Map<String, dynamic> json) {
@@ -32,7 +43,12 @@ class Device {
       roomName: json['room'] != null ? json['room']['name'] : "Chưa có phòng",
       
       // (MỚI) Nếu backend chưa trả về field này thì mặc định là true (Wifi)
-      isWiFi: json['connectivity'] == 'BLE' ? false : true, 
+      isWiFi: json['connectivity'] == 'BLE' ? false : true,
+
+      isOnline: json['online'] ?? false,
+      power: 0.0,
+      current: 0.0,
+      totalKwh: 0.0,
     );
   }
 

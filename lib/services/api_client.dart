@@ -1,58 +1,60 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../utils/navigation_service.dart';
 import '../routes.dart';
-import 'package:http/http.dart' as http;
 
 class ApiClient {
-  // Hàm GET chung
-  static Future<http.Response> get(String endpoint) async {
+  // 1. Hàm bổ trợ để tránh lặp code
+  static Future<http.Response> _sendRequest(String method, String endpoint, {dynamic body}) async {
+    final url = Uri.parse('${AppConfig.baseUrl}$endpoint');
     final headers = await _getHeaders();
-    final response = await http.get(
-      Uri.parse('${AppConfig.baseUrl}$endpoint'),
-      headers: headers,
-    );
-    return _handleResponse(response);
+    late http.Response response;
+
+    try {
+      switch (method.toUpperCase()) {
+        case 'GET': response = await http.get(url, headers: headers); break;
+        case 'POST': response = await http.post(url, headers: headers, body: jsonEncode(body)); break;
+        case 'PUT': response = await http.put(url, headers: headers, body: jsonEncode(body)); break;
+        case 'DELETE': response = await http.delete(url, headers: headers); break;
+        default: throw Exception("Method not supported");
+      }
+      return _handleResponse(response);
+    } on SocketException {
+      throw Exception("No Internet Connection");
+    } catch (e) {
+      rethrow;
+    }
   }
 
-  // Hàm POST chung
-  static Future<http.Response> post(String endpoint, dynamic body) async {
-    final headers = await _getHeaders();
-    final response = await http.post(
-      Uri.parse('${AppConfig.baseUrl}$endpoint'),
-      headers: headers,
-      body: jsonEncode(body),
-    );
-    return _handleResponse(response);
-  }
+  // 2. Các hàm Public (Vợ gọi từ Service)
+  static Future<http.Response> get(String endpoint) => _sendRequest('GET', endpoint);
+  static Future<http.Response> post(String endpoint, dynamic body) => _sendRequest('POST', endpoint, body: body);
+  static Future<http.Response> put(String endpoint, dynamic body) => _sendRequest('PUT', endpoint, body: body);
 
-  // 1. Tự động lấy Token nhét vào Header
+  // 3. Header tự động lấy Token
   static Future<Map<String, String>> _getHeaders() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('jwt_token');
     return {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
 
-  // 2. Tự động kiểm tra lỗi 401 tập trung
+  // 4. Xử lý lỗi TẬP TRUNG (QUAN TRỌNG NHẤT)
   static Future<http.Response> _handleResponse(http.Response response) async {
     if (response.statusCode == 401) {
-      print("🚨 LỖI 401: Token hết hạn hoặc User bị xóa -> Auto Logout");
-
-      // Xóa sạch dữ liệu
+      print("🚨 401 UNAUTHORIZED -> Auto Logout");
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
-
-      // Dùng chìa khóa vạn năng để đá về trang Login Options
-      NavigationService.navigatorKey.currentState?.pushNamedAndRemoveUntil(
-        AppRoutes.loginOptions, // Hoặc AppRoutes.welcome tùy vợ đặt tên
-        (route) => false,
-      );
+      await prefs.remove('jwt_token'); // Xóa token thôi, giữ lại seenOnboarding
       
+      NavigationService.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+        AppRoutes.loginOptions, (route) => false,
+      );
       throw Exception('UNAUTHORIZED');
     }
     return response;
@@ -60,33 +62,9 @@ class ApiClient {
 
   static Future<bool> checkConnection() async {
     try {
-      // Gọi thử vào trang chủ hoặc 1 API public nào đó không cần Token
-      // Timeout 3 giây thôi, lâu quá user chờ mệt
-      final response = await http.get(
-        Uri.parse('${AppConfig.baseUrl}/auth/ping'), // Vợ có thể dùng /auth/login (GET) hoặc endpoint nào nhẹ
-      ).timeout(const Duration(seconds: 3));
-
-      // Nếu Server phản hồi (dù lỗi 401 hay 404) chứng tỏ là ĐÃ KẾT NỐI ĐƯỢC
+      final response = await http.get(Uri.parse('${AppConfig.baseUrl}/auth/ping'))
+          .timeout(const Duration(seconds: 3));
       return true; 
-    } catch (e) {
-      print("Lỗi kết nối Server: $e");
-      return false; // Không kết nối được
-    }
+    } catch (_) { return false; }
   }
-
-  // Thêm vào trong class ApiClient ở file lib/services/api_client.dart
-static Future<http.Response> put(String endpoint, Map<String, dynamic> body) async {
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('jwt_token');
-
-  final response = await http.put(
-    Uri.parse('${AppConfig.baseUrl}$endpoint'),
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    },
-    body: jsonEncode(body),
-  );
-  return response;
-}
 }

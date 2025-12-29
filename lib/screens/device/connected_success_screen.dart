@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../routes.dart';
-import 'add_device_screen.dart'; // Import để lấy class DeviceItem
-import 'tabs/nearby_scan_tab.dart';
+import '../../models/device_model.dart'; // Dùng Model Device thật
+import '../control/device_control_screen.dart'; // Import trang điều khiển
+
 class ConnectedSuccessScreen extends StatelessWidget {
-  final DeviceItem device;
+  final Device device; // Nhận vào Device thật
 
   const ConnectedSuccessScreen({super.key, required this.device});
 
@@ -23,7 +24,7 @@ class ConnectedSuccessScreen extends StatelessWidget {
             Container(
               width: 100, height: 100,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B6EF6), // Xanh tím đẹp
+                color: const Color(0xFF4B6EF6), 
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(color: const Color(0xFF4B6EF6).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))
@@ -40,9 +41,9 @@ class ConnectedSuccessScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              "You have connected to ${device.name}.", // Hiện tên thiết bị
+              "You have successfully connected to\n${device.name}.", // Hiện tên thiết bị
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 1.5),
             ),
 
             const SizedBox(height: 50),
@@ -54,7 +55,8 @@ class ConnectedSuccessScreen extends StatelessWidget {
                 color: Colors.grey[50],
                 shape: BoxShape.circle,
               ),
-              child: Icon(device.icon, size: 120, color: device.color),
+              // Dùng icon từ Model Device thật
+              child: Icon(device.icon, size: 100, color: primaryColor),
             ),
 
             const Spacer(flex: 2),
@@ -82,14 +84,20 @@ class ConnectedSuccessScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Nút Control Device (Xanh đậm)
+                
+                // Nút Control Device (Xanh đậm) -> VÀO ĐIỀU KHIỂN LUÔN
                 Expanded(
                   child: SizedBox(
                     height: 55,
                     child: ElevatedButton(
                       onPressed: () {
-                        // Tạm thời cũng về Home hoặc chuyển sang trang điều khiển (làm sau)
-                        print("Navigate to Control Device");
+                        // Chuyển sang trang điều khiển thiết bị
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => DeviceControlScreen(device: device),
+                          ),
+                        );
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF4B6EF6),

@@ -178,14 +178,23 @@ class _DeviceLogScreenState extends State<DeviceLogScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1. Tiêu đề: Hiển thị hành động Bật/Tắt rõ ràng
                 Text(
-                  "Device turned ${isON ? 'ON' : 'OFF'}",
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  isON ? "ĐÃ BẬT NGUỒN" : "ĐÃ TẮT NGUỒN", // Tiếng Việt cho thân thiện
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold, 
+                    fontSize: 15,
+                    color: isON ? Colors.blue[700] : Colors.black87
+                  ),
                 ),
                 const SizedBox(height: 4),
+                
+                // 2. Chi tiết: Hiển thị "Điều khiển từ App" (Lấy từ log.details)
                 Text(
-                  "Room: ${log.roomName}",
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  log.details.isNotEmpty ? log.details : "Room: ${log.roomName}",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

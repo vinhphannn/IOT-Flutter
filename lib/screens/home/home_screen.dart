@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // 1. Import Provider
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../routes.dart';
@@ -7,9 +8,9 @@ import '../../services/room_service.dart';
 import '../../services/house_service.dart';
 import '../../models/device_model.dart';
 import '../../models/house_model.dart';
-import '../device/category_devices_screen.dart';
+import '../../providers/device_provider.dart'; // 2. Import Kho tổng
 
-// --- IMPORT CÁC FILE VỪA TÁCH ---
+import '../device/category_devices_screen.dart';
 import 'home_weather_widget.dart';
 import 'home_devices_body.dart';
 
@@ -29,8 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedRoomIndex = 0;
   List<String> _rooms = ["All Rooms"];
   
-  List<Device> _allDevices = []; // Dữ liệu gốc
-  List<Device> _homeDisplayDevices = []; // Dữ liệu đã lọc
+  // Vợ ơi, mình bỏ _allDevices và _homeDisplayDevices cục bộ đi nhé
+  // Vì giờ mình dùng hàng xịn từ Provider rồi!
 
   @override
   void initState() {
@@ -81,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     List<String> roomsFromDb = [];
     List<Device> devicesFromDb = [];
 
-    // Gọi song song hoặc tuần tự (đã tách try-catch để an toàn)
+    // Gọi API lấy dữ liệu
     try {
       roomsFromDb = await roomService.fetchRoomNamesByHouse(houseId);
     } catch (e) { debugPrint("❌ Lỗi lấy phòng: $e"); }
@@ -93,10 +94,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _rooms = ["All Rooms", ...roomsFromDb];
-        _allDevices = devicesFromDb;
         _selectedRoomIndex = 0;
       });
-      _filterDevices();
+
+      // --- 3. QUAN TRỌNG: NẠP DỮ LIỆU VÀO KHO TỔNG (PROVIDER) ---
+      // Dòng này giúp fix lỗi ID=0 ở các trang sau
+      context.read<DeviceProvider>().setDevices(devicesFromDb);
     }
   }
 
@@ -116,29 +119,23 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setInt('currentHouseId', id);
   }
 
-  void _filterDevices() {
-    setState(() {
-      if (_selectedRoomIndex == 0) {
-        _homeDisplayDevices = _allDevices;
-      } else {
-        String roomName = _rooms[_selectedRoomIndex];
-        _homeDisplayDevices = _allDevices.where((d) => d.roomName == roomName).toList();
-      }
-    });
-  }
-
+  // Hàm điều hướng giữ nguyên
   void _navigateToCategory(String type, String title) {
+    // Lưu ý: Nếu cần truyền danh sách thiết bị vào Category, 
+    // vợ có thể lấy từ Provider.of<DeviceProvider>(context, listen: false).devices
+    final allDevices = context.read<DeviceProvider>().devices;
+    
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CategoryDevicesScreen(
-          categoryType: type, title: title, allDevices: _allDevices,
+          categoryType: type, title: title, allDevices: allDevices,
         ),
       ),
     );
   }
 
-  // --- GIAO DIỆN CHÍNH (Siêu gọn gàng) ---
+  // --- GIAO DIỆN CHÍNH (Đã nâng cấp Consumer) ---
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -165,23 +162,39 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildHeader(context),
                 const SizedBox(height: 24),
                 
-                // 2. Weather Widget (File tách riêng)
+                // 2. Weather Widget
                 const HomeWeatherWidget(),
                 const SizedBox(height: 24),
 
-                // 3. Devices Body (Summary, Filter, Grid - File tách riêng)
-                HomeDevicesBody(
-                  allDevices: _allDevices,
-                  displayDevices: _homeDisplayDevices,
-                  rooms: _rooms,
-                  selectedRoomIndex: _selectedRoomIndex,
-                  onRoomChanged: (index) {
-                    setState(() {
-                      _selectedRoomIndex = index;
-                      _filterDevices();
-                    });
+                // 3. Devices Body - BỌC TRONG CONSUMER ĐỂ TỰ CẬP NHẬT
+                Consumer<DeviceProvider>(
+                  builder: (context, deviceProvider, child) {
+                    // Lấy dữ liệu từ Kho tổng
+                    final allDevices = deviceProvider.devices;
+                    
+                    // Logic lọc thiết bị theo phòng (đưa từ hàm cũ vào đây)
+                    List<Device> displayDevices;
+                    if (_selectedRoomIndex == 0) {
+                      displayDevices = allDevices;
+                    } else {
+                      String roomName = _rooms[_selectedRoomIndex];
+                      displayDevices = allDevices.where((d) => d.roomName == roomName).toList();
+                    }
+
+                    return HomeDevicesBody(
+                      allDevices: allDevices,
+                      displayDevices: displayDevices,
+                      rooms: _rooms,
+                      selectedRoomIndex: _selectedRoomIndex,
+                      onRoomChanged: (index) {
+                        setState(() {
+                          _selectedRoomIndex = index;
+                          // Không cần gọi _filterDevices nữa vì Consumer sẽ tự lo
+                        });
+                      },
+                      onCategoryTap: _navigateToCategory,
+                    );
                   },
-                  onCategoryTap: _navigateToCategory,
                 ),
               ],
             ),
@@ -191,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Header vẫn giữ ở đây vì nó liên quan trực tiếp đến state _currentHouse
+  // Header vẫn giữ nguyên
   Widget _buildHeader(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

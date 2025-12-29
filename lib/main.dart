@@ -3,18 +3,35 @@ import 'package:flutter/services.dart';
 import 'utils/navigation_service.dart';
 import 'routes.dart';
 import 'config/app_config.dart';
+// ... import provider ...
+import 'package:provider/provider.dart';
+import 'providers/device_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load cấu hình server
   await AppConfig.loadBaseUrl();
+  
+  // Khóa màn hình dọc
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  runApp(const MyApp());
+  // 3. Bọc toàn bộ MyApp trong MultiProvider
+  runApp(
+    MultiProvider(
+      providers: [
+        // Khởi tạo DeviceProvider ngay từ lúc App mới mở mắt
+        ChangeNotifierProvider(create: (_) => DeviceProvider()),
+        
+        // Sau này nếu có thêm UserProvider hay NotificationProvider thì cứ thêm tiếp vào đây
+      ],
+      child: const MyApp(), // MyApp bây giờ là con của Provider
+    ),
+  );
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 

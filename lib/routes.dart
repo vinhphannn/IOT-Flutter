@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
-// 1. Import các màn hình đã làm xong
+// --- IMPORT MODELS ---
+import 'models/device_model.dart'; // Model Device thật
+import 'screens/device/tabs/nearby_scan_tab.dart'; // Model DeviceItem (quét)
+
+// --- IMPORT CÁC MÀN HÌNH ---
 import 'screens/splash_screen.dart';
-import 'screens/onboarding/onboarding_screen.dart'; // <-- MỚI THÊM DÒNG NÀY
+import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/auth/sign_up_screen.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/setup/setup_screen.dart';
@@ -13,20 +17,20 @@ import 'screens/auth/otp_verification_screen.dart';
 import 'screens/auth/new_password_screen.dart';
 import 'screens/auth/reset_password_success_screen.dart';
 import 'screens/home/home_screen.dart';
-import 'screens/device/add_device_screen.dart';
-import 'screens/device/connect_device_screen.dart';
-import 'screens/device/connected_success_screen.dart';
 import 'screens/main_screen.dart';
-import 'screens/device/tabs/nearby_scan_tab.dart';
-import 'screens/device/qr_scan_screen.dart';
 import 'screens/notification/notification_screen.dart';
 import 'screens/chat/chat_screen.dart';
 import 'screens/voice/voice_assistant_screen.dart';
-import 'models/device_model.dart';
+
+// --- IMPORT MÀN HÌNH THIẾT BỊ ---
+import 'screens/device/add_device_screen.dart';
+import 'screens/device/connect_device_screen.dart';
+import 'screens/device/connected_success_screen.dart';
+import 'screens/device/qr_scan_screen.dart';
 import 'screens/control/device_control_screen.dart';
 
 class AppRoutes {
-  // Định nghĩa tên Routes
+  // --- ĐỊNH NGHĨA TÊN ROUTES ---
   static const String splash = '/';
   static const String onboarding = '/onboarding';
   static const String terms = '/terms';
@@ -50,87 +54,77 @@ class AppRoutes {
   static const String voiceAssistant = '/voice-assistant';
   static const String controlDevice = '/control-device';
 
-  // Hàm điều hướng
+  // --- HÀM ĐIỀU HƯỚNG ---
   static Route<dynamic> generateRoute(RouteSettings settings) {
     // Lấy tham số truyền vào (nếu có)
     final args = settings.arguments;
 
     switch (settings.name) {
+      // 1. Màn hình khởi động & Chào mừng
       case splash:
         return MaterialPageRoute(builder: (_) => const SplashScreen());
-
       case onboarding:
-        // Đã import ở trên nên dòng này giờ sẽ chạy ngon lành
         return MaterialPageRoute(builder: (_) => const OnboardingScreen());
-
-      // --- Các màn hình chưa làm thì dùng Placeholder tạm ---
       case loginOptions:
         return MaterialPageRoute(builder: (_) => const WelcomeScreen());
 
+      // 2. Màn hình Auth (Đăng nhập, Đăng ký, Quên mật khẩu)
       case signIn:
         return MaterialPageRoute(builder: (_) => const SignInScreen());
-
-      // 2. Thêm case mới
-      case forgotPassword:
-        return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
-      // 2. Thêm case mới
-      case otpVerification:
-        return MaterialPageRoute(builder: (_) => const OtpVerificationScreen());
-
-      case resetPassword:
-        return MaterialPageRoute(builder: (_) => const NewPasswordScreen());
       case signUp:
         return MaterialPageRoute(builder: (_) => const SignUpScreen());
-
       case signUpSetup:
         return MaterialPageRoute(builder: (_) => const SetupScreen());
       case signUpComplete:
         return MaterialPageRoute(builder: (_) => const SignUpCompleteScreen());
-      case otp:
-        return MaterialPageRoute(
-          builder: (_) => PlaceholderScreen(title: 'Nhập OTP cho: $args'),
-        );
-
+      case forgotPassword:
+        return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
+      case otpVerification:
+        return MaterialPageRoute(builder: (_) => const OtpVerificationScreen());
+      case resetPassword:
+        return MaterialPageRoute(builder: (_) => const NewPasswordScreen());
       case resetPasswordSuccess:
-        return MaterialPageRoute(
-          builder: (_) => const ResetPasswordSuccessScreen(),
-        );
-
+        return MaterialPageRoute(builder: (_) => const ResetPasswordSuccessScreen());
+      
+      // 3. Màn hình chính
       case home:
         return MaterialPageRoute(builder: (_) => const MainScreen());
-
-      case addDevice: // <-- Thêm case này
-        return MaterialPageRoute(builder: (_) => const AddDeviceScreen());
-
-      case connectDevice:
-        // Lấy dữ liệu DeviceItem được truyền sang
-        final device = settings.arguments as DeviceItem;
-        return MaterialPageRoute(
-          builder: (_) => ConnectDeviceScreen(device: device),
-        );
-
-      case connectedSuccess:
-        final device = settings.arguments as DeviceItem;
-        return MaterialPageRoute(
-          builder: (_) => ConnectedSuccessScreen(device: device),
-        );
-
-      case scanQR: // <-- THÊM CASE NÀY
-        return MaterialPageRoute(builder: (_) => const QRScanScreen());
-
       case notification:
         return MaterialPageRoute(builder: (_) => const NotificationScreen());
-
       case chat:
         return MaterialPageRoute(builder: (_) => const ChatScreen());
       case voiceAssistant:
         return MaterialPageRoute(builder: (_) => const VoiceAssistantScreen());
 
-      case controlDevice:
+      // 4. Màn hình thiết bị (Add, Connect, Control)
+      case addDevice:
+        return MaterialPageRoute(builder: (_) => const AddDeviceScreen());
+      
+      case scanQR:
+        return MaterialPageRoute(builder: (_) => const QRScanScreen());
+
+      case connectDevice:
+        // Nhận DeviceItem (lúc quét)
+        final deviceItem = settings.arguments as DeviceItem;
+        return MaterialPageRoute(
+          builder: (_) => ConnectDeviceScreen(device: deviceItem),
+        );
+
+      case connectedSuccess:
+        // SỬA LỖI Ở ĐÂY: Nhận Device (Model thật)
         final device = settings.arguments as Device;
         return MaterialPageRoute(
-          builder: (_) => DeviceControlScreen(device: device),
+          builder: (_) => ConnectedSuccessScreen(device: device),
         );
+
+      case controlDevice:
+        // Nhận Device để điều khiển
+        final deviceToControl = settings.arguments as Device;
+        return MaterialPageRoute(
+          builder: (_) => DeviceControlScreen(device: deviceToControl),
+        );
+
+      // 5. Màn hình tạm (Placeholder)
       default:
         return _errorRoute();
     }
@@ -145,42 +139,6 @@ class AppRoutes {
           body: const Center(child: Text('Không tìm thấy màn hình này!')),
         );
       },
-    );
-  }
-}
-
-// --- WIDGET TẠM (Giữ lại để test chuyển trang, sau này xóa sau) ---
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-  const PlaceholderScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Đây là màn hình: $title',
-              style: const TextStyle(fontSize: 18),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Logic test chuyển trang
-                if (title == 'Splash Screen')
-                  Navigator.pushNamed(context, AppRoutes.onboarding);
-                // Nếu đang ở Onboarding hoặc Login thì về Home
-                else
-                  Navigator.pushNamed(context, AppRoutes.home);
-              },
-              child: const Text('Test chuyển trang kế tiếp'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

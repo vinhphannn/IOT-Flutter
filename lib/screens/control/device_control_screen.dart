@@ -121,13 +121,19 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     );
   }
 
-  Widget _buildDeviceBody() {
+Widget _buildDeviceBody() {
+  print("🔍 [DEBUG] DeviceControlScreen đang giữ device có ID: ${widget.device.id}"); // <--- THÊM DÒNG NÀY
     switch (widget.device.type.toUpperCase()) {
       case 'LIGHT':
       case 'RELAY':
-        return LightControlWidget(device: widget.device);
+        // Nếu vợ chưa sửa file LightControlWidget thì cứ để nguyên dòng này
+        return LightControlWidget(device: widget.device); 
+        
       case 'SOCKET':
-        return SocketControlWidget(device: widget.device);
+        // --- SỬA Ở ĐÂY NÈ VỢ ---
+        // Thay vì truyền cả device, giờ mình chỉ truyền ID thôi
+        return SocketControlWidget(deviceId: widget.device.id);
+        
       default:
         return Center(
           child: Column(
@@ -145,7 +151,6 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
         );
     }
   }
-
   // Nút bấm dưới cùng cho giống mẫu thiết kế
   Widget _buildBottomAction() {
     return Padding(
