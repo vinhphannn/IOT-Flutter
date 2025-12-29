@@ -26,50 +26,15 @@ class HomeDevicesBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
 
-    // --- 1. CẤU HÌNH DANH SÁCH (GIỮ NGUYÊN) ---
+    // --- 1. CẤU HÌNH DANH SÁCH ---
     final List<Map<String, dynamic>> summaryCategories = [
-      {
-        'title': 'Lighting',
-        'types': ['RELAY', 'LIGHT'],
-        'icon': Icons.lightbulb_outline,
-        'color': Colors.amber,
-      },
-      {
-        'title': 'Sockets',
-        'types': ['SOCKET', 'PLUG'],
-        'icon': Icons.power,
-        'color': Colors.purple,
-      },
-      {
-        'title': 'Sensors',
-        'types': ['SENSOR'],
-        'icon': Icons.sensors,
-        'color': Colors.orange,
-      },
-      {
-        'title': 'Comfort',
-        'types': ['AC', 'FAN', 'HEATER', 'THERMOSTAT'],
-        'icon': Icons.thermostat,
-        'color': Colors.blue,
-      },
-      {
-        'title': 'Security',
-        'types': ['CAMERA', 'LOCK', 'DOORBELL'],
-        'icon': Icons.security,
-        'color': Colors.red,
-      },
-      {
-        'title': 'Media',
-        'types': ['TV', 'SPEAKER'],
-        'icon': Icons.tv,
-        'color': Colors.teal,
-      },
-      {
-        'title': 'Kitchen',
-        'types': ['FRIDGE', 'OVEN', 'KETTLE'],
-        'icon': Icons.kitchen,
-        'color': Colors.brown,
-      },
+      {'title': 'Lighting', 'types': ['RELAY', 'LIGHT'], 'icon': Icons.lightbulb_outline, 'color': Colors.amber},
+      {'title': 'Sockets', 'types': ['SOCKET', 'PLUG'], 'icon': Icons.power, 'color': Colors.purple},
+      {'title': 'Sensors', 'types': ['SENSOR'], 'icon': Icons.sensors, 'color': Colors.orange},
+      {'title': 'Comfort', 'types': ['AC', 'FAN', 'HEATER', 'THERMOSTAT'], 'icon': Icons.thermostat, 'color': Colors.blue},
+      {'title': 'Security', 'types': ['CAMERA', 'LOCK', 'DOORBELL'], 'icon': Icons.security, 'color': Colors.red},
+      {'title': 'Media', 'types': ['TV', 'SPEAKER'], 'icon': Icons.tv, 'color': Colors.teal},
+      {'title': 'Kitchen', 'types': ['FRIDGE', 'OVEN', 'KETTLE'], 'icon': Icons.kitchen, 'color': Colors.brown},
     ];
 
     return Column(
@@ -82,7 +47,6 @@ class HomeDevicesBody extends StatelessWidget {
           child: Row(
             children: summaryCategories.map((category) {
               List<String> types = category['types'] as List<String>;
-              // Đếm số lượng thiết bị (Tự động cập nhật nhờ Provider ở cha)
               int count = allDevices.where((d) => types.contains(d.type.toUpperCase())).length;
 
               return Padding(
@@ -170,18 +134,22 @@ class HomeDevicesBody extends StatelessWidget {
 
         const SizedBox(height: 20),
 
-// --- GRID THIẾT BỊ ---
+        // --- GRID THIẾT BỊ ---
         displayDevices.isEmpty
             ? _buildEmptyState(primaryColor, context)
             : GridView.builder(
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
+                
+                // --- CHỒNG BỔ SUNG ĐOẠN THIẾU Ở ĐÂY NÈ ---
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, 
-                  crossAxisSpacing: 16, 
-                  mainAxisSpacing: 16, 
-                  childAspectRatio: 0.85,
+                  crossAxisCount: 2,      // 2 Cột
+                  crossAxisSpacing: 16,   // Khoảng cách ngang
+                  mainAxisSpacing: 16,    // Khoảng cách dọc
+                  childAspectRatio: 0.85, // Tỷ lệ khung hình
                 ),
+                // ------------------------------------------
+
                 itemCount: displayDevices.length,
                 itemBuilder: (context, index) {
                   final device = displayDevices[index];
@@ -189,30 +157,32 @@ class HomeDevicesBody extends StatelessWidget {
 
                   return Stack(
                     children: [
-                      // 1. Thẻ thiết bị (Mờ đi nhiều hơn chút để nổi bật icon offline)
+                      // 1. Thẻ thiết bị (Gỡ bỏ khóa AbsorbPointer ở đây, chỉ giữ Opacity)
                       Opacity(
-                        opacity: isOnline ? 1.0 : 0.4, // Giảm xuống 0.4 cho mờ hẳn
+                        opacity: isOnline ? 1.0 : 0.5,
                         child: DeviceCard(
                           device: device,
                           showRoomInfo: selectedRoomIndex == 0,
                         ),
                       ),
 
-                      // 2. Icon Wifi gạch chéo TO nằm GIỮA
+                      // 2. Icon Offline nằm đè lên trên (Nhưng cho phép bấm xuyên qua nhờ IgnorePointer)
                       if (!isOnline)
-                        Positioned.fill( // Phủ kín thẻ để căn giữa
-                          child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                // Nền trắng mờ nhẹ để icon nổi bật trên nền thẻ
-                                color: Colors.white.withOpacity(0.6), 
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.cloud_off_rounded, // Hoặc wifi_off_rounded
-                                size: 32, // To rõ ràng
-                                color: Colors.grey[600]!.withOpacity(0.8), // Màu xám đậm mờ mờ cho tinh tế
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.7), 
+                                  shape: BoxShape.circle,
+                                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)]
+                                ),
+                                child: Icon(
+                                  Icons.cloud_off_rounded,
+                                  size: 32, 
+                                  color: Colors.grey[600],
+                                ),
                               ),
                             ),
                           ),
@@ -227,7 +197,7 @@ class HomeDevicesBody extends StatelessWidget {
     );
   }
 
-  // Widget Empty State (Giữ nguyên)
+  // Widget Empty State
   Widget _buildEmptyState(Color primaryColor, BuildContext context) {
     return Center(
       child: Column(

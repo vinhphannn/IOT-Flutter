@@ -141,6 +141,49 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
+  // --- HÀM BỔ SUNG (CHO UI GỌI THỦ CÔNG) ---
+  
+  // Map để quản lý các gói đăng ký (để sau này còn hủy được)
+  final Map<int, dynamic> _subscriptions = {};
+
+  void subscribeToDevice(int deviceId) {
+    // 1. Tìm thiết bị
+    final index = _devices.indexWhere((d) => d.id == deviceId);
+    if (index == -1) return;
+    
+    final device = _devices[index];
+    final macUpper = device.macAddress.toUpperCase();
+
+    // 2. Kiểm tra kết nối
+    if (_stompClient == null || !_stompClient!.connected) {
+        print("⚠️ Socket chưa sẵn sàng, đang kết nối lại...");
+        _initWebSocket();
+        return;
+    }
+
+    print("🎧 [PROVIDER] Đang đăng ký lắng nghe: $macUpper");
+
+    // 3. Đăng ký topic
+    // Lưu cái token hủy vào Map để dùng sau này
+    _subscriptions[deviceId] = _stompClient!.subscribe(
+      destination: '/topic/device/$macUpper/data',
+      callback: (frame) {
+        if (frame.body != null) {
+          _updateDeviceFromSocket(deviceId, frame.body!);
+        }
+      },
+    );
+  }
+
+  // Hàm hủy đăng ký (Dùng khi thoát màn hình để đỡ tốn RAM)
+  void unsubscribeFromDevice(int deviceId) {
+    if (_subscriptions.containsKey(deviceId)) {
+      _subscriptions[deviceId]?.call(); // Gọi hàm hủy
+      _subscriptions.remove(deviceId);
+      print("🔕 [PROVIDER] Đã hủy lắng nghe thiết bị $deviceId");
+    }
+  }
+
   // Ngắt kết nối khi thoát App hẳn (ít khi dùng nhưng nên có)
   @override
   void dispose() {

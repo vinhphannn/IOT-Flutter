@@ -1,60 +1,33 @@
 import 'package:flutter/material.dart';
-import '../../models/device_model.dart';
-import '../../routes.dart';
-import '../../services/house_service.dart'; // Import service để gọi API
-import '../../models/device_model.dart';
-import '../../services/house_service.dart';
+import 'package:provider/provider.dart'; // Nhớ import Provider
+import '../models/device_model.dart';
+import '../providers/device_provider.dart'; // Import kho tổng
+import '../routes.dart';
 
-class DeviceCard extends StatefulWidget {
-  // ... giữ nguyên
+class DeviceCard extends StatelessWidget {
   final Device device;
   final bool showRoomInfo;
-  const DeviceCard({super.key, required this.device, this.showRoomInfo = false});
 
-  @override
-  State<DeviceCard> createState() => _DeviceCardState();
-}
-
-class _DeviceCardState extends State<DeviceCard> {
-  late bool _isOn;
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _isOn = widget.device.isOn;
-  }
-
-  Future<void> _toggleQuick(bool value) async {
-    setState(() { _isOn = value; _isLoading = true; });
-    try {
-      // SỬA LỖI Ở ĐÂY: .toString() để chuyển int thành String
-      bool success = await HouseService().toggleDevice(widget.device.id.toString(), value);
-      
-      if (success) {
-        widget.device.isOn = value;
-      } else {
-        setState(() => _isOn = !value);
-      }
-    } catch (e) {
-      setState(() => _isOn = !value);
-    } finally {
-      if(mounted) setState(() => _isLoading = false);
-    }
-  }
+  const DeviceCard({
+    super.key, 
+    required this.device, 
+    this.showRoomInfo = false
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Gọi Provider (listen: false vì mình chỉ cần gọi hàm, việc vẽ lại UI đã có Consumer ở cha lo)
+    final provider = Provider.of<DeviceProvider>(context, listen: false);
+    final isOnline = device.isOnline; // Lấy trạng thái mạng
+
     return GestureDetector(
+      // 1. BẤM VÀO THẺ -> VÀO TRANG CONTROL (Luôn cho phép, kể cả Offline)
       onTap: () {
         Navigator.pushNamed(
           context,
           AppRoutes.controlDevice,
-          arguments: widget.device,
-        ).then((_) {
-          // Khi quay lại từ màn hình chi tiết, cập nhật lại trạng thái
-          setState(() => _isOn = widget.device.isOn);
-        });
+          arguments: device,
+        );
       },
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -73,21 +46,34 @@ class _DeviceCardState extends State<DeviceCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Icon
+                // Icon Thiết bị
                 Container(
                   width: 40, height: 40,
                   decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: Icon(widget.device.icon, size: 28, color: _isOn ? Colors.amber : Colors.grey[700]),
+                  // Nếu Offline thì icon màu xám, Online thì màu vàng (khi bật)
+                  child: Icon(
+                    device.icon, 
+                    size: 28, 
+                    color: isOnline 
+                        ? (device.isOn ? Colors.amber : Colors.grey[700]) 
+                        : Colors.grey[400], 
+                  ),
                 ),
-                // Switch (Chỉ hiện nếu thiết bị switchable)
-                if (widget.device.isSwitchable)
+                
+                // Switch (Nút gạt)
+                if (device.isSwitchable)
                   Transform.scale(
                     scale: 0.8,
                     child: Switch(
-                      value: _isOn,
+                      value: device.isOn,
                       activeColor: Colors.white,
                       activeTrackColor: const Color(0xFF4B6EF6),
-                      onChanged: _isLoading ? null : _toggleQuick,
+                      // LOGIC KHÓA NÚT KHI OFFLINE:
+                      // Nếu Online -> Gọi hàm toggle của Provider
+                      // Nếu Offline -> Gán null (Nút sẽ bị liệt/xám đi)
+                      onChanged: isOnline 
+                          ? (val) => provider.toggleDevice(device.id)
+                          : null,
                     ),
                   ),
               ],
@@ -97,24 +83,41 @@ class _DeviceCardState extends State<DeviceCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.device.name,
+                  device.name,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
-                if (widget.showRoomInfo) ...[
+                if (showRoomInfo) ...[
                   const SizedBox(height: 4),
-                  Text(widget.device.roomName, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  Text(device.roomName, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                 ],
                 const SizedBox(height: 8),
+                
+                // HIỂN THỊ TRẠNG THÁI KẾT NỐI
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(
+                    // Offline màu đỏ nhạt, Online màu xám nhạt
+                    color: isOnline ? Colors.grey[100] : Colors.red[50], 
+                    borderRadius: BorderRadius.circular(8)
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.wifi, size: 10, color: Colors.grey[600]), // Mặc định là Wifi
+                      Icon(
+                        isOnline ? Icons.wifi : Icons.wifi_off, 
+                        size: 10, 
+                        color: isOnline ? Colors.green[600] : Colors.red[400]
+                      ),
                       const SizedBox(width: 4),
-                      Text("Wi-Fi", style: TextStyle(fontSize: 10, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                      Text(
+                        isOnline ? "Online" : "Offline", 
+                        style: TextStyle(
+                          fontSize: 10, 
+                          color: isOnline ? Colors.grey[600] : Colors.red[400], 
+                          fontWeight: FontWeight.bold
+                        )
+                      ),
                     ],
                   ),
                 ),
