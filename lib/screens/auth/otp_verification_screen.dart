@@ -1,6 +1,6 @@
 import 'dart:async'; 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Cần để giới hạn ký tự nhập
+import 'package:flutter/services.dart'; 
 import '../../routes.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
@@ -11,87 +11,121 @@ class OtpVerificationScreen extends StatefulWidget {
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
-  // --- 1. QUẢN LÝ INPUT (4 ô) ---
-  // Khai báo biến trễ (late), sẽ được khởi tạo trong initState
   late List<TextEditingController> _controllers;
   late List<FocusNode> _focusNodes;
 
-  // --- 2. QUẢN LÝ TIMER ---
   int _resendSeconds = 56;
   Timer? _timer;
+  String? _email;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Nhận dữ liệu từ màn hình trước
+    final args = ModalRoute.of(context)?.settings.arguments;
+
+    if (args is Map && args['email'] != null) {
+      _email = args['email'];
+      print("✅ OTP Screen: Đã nhận được Email: $_email");
+    } else if (args is String) {
+      _email = args; // Fallback nếu lỡ gửi String
+      print("⚠️ OTP Screen: Nhận được Email dạng String: $_email");
+    } else {
+      print("❌ OTP Screen: CRITICAL ERROR - Args is NULL!");
+      
+      // Nếu không có email, hiển thị lỗi và bắt quay lại ngay lập tức
+      // Dùng Future.microtask để tránh lỗi setState khi đang build
+      Future.microtask(() {
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Text("Error"),
+              content: const Text("Email not found. Please try again."),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Đóng dialog
+                    Navigator.pop(context); // Quay về màn nhập Email
+                  },
+                  child: const Text("Go Back"),
+                )
+              ],
+            ),
+          );
+        }
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    // QUAN TRỌNG: Khởi tạo các controller và focus node ở đây
-    _controllers = List.generate(4, (index) => TextEditingController());
-    _focusNodes = List.generate(4, (index) => FocusNode());
-    
-    // Bắt đầu đếm ngược
+    _controllers = List.generate(6, (index) => TextEditingController());
+    _focusNodes = List.generate(6, (index) => FocusNode());
     _startResendTimer();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    // Giải phóng bộ nhớ khi thoát màn hình để tránh rò rỉ bộ nhớ (Memory Leak)
     for (var c in _controllers) c.dispose();
     for (var n in _focusNodes) n.dispose();
     super.dispose();
   }
 
   void _startResendTimer() {
-    setState(() {
-      _resendSeconds = 56;
-    });
+    setState(() => _resendSeconds = 56);
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
-          if (_resendSeconds > 0) {
-            _resendSeconds--;
-          } else {
-            _timer?.cancel();
-          }
+          if (_resendSeconds > 0) _resendSeconds--;
+          else _timer?.cancel();
         });
       }
     });
   }
 
-  // --- 3. XỬ LÝ KHI NHẬP SỐ ---
   void _onChanged(String value, int index) {
-    // Nếu nhập vào 1 số (độ dài = 1)
     if (value.length == 1) {
-      // Nếu chưa phải ô cuối cùng -> Chuyển focus sang ô kế tiếp
-      if (index < 3) {
+      if (index < 5) {
         FocusScope.of(context).requestFocus(_focusNodes[index + 1]);
       } else {
-        // Nếu là ô cuối cùng -> Ẩn bàn phím và Xác thực
         FocusScope.of(context).unfocus();
         _handleVerify();
       }
-    }
-    // Nếu xóa (độ dài = 0) và không phải ô đầu tiên -> Quay lui về ô trước
-    else if (value.isEmpty && index > 0) {
+    } else if (value.isEmpty && index > 0) {
       FocusScope.of(context).requestFocus(_focusNodes[index - 1]);
     }
   }
 
-// Hàm giả lập xác thực OTP
-  void _handleVerify() async { // <--- Thêm async
-    // Ghép 4 số lại
+  void _handleVerify() async {
     String otp = _controllers.map((c) => c.text).join();
-    print("Verifying OTP: $otp");
     
-    // 1. Hiện loading (nếu muốn làm kỹ hơn thì bọc UI bằng Stack loading như các trang trước)
-    // Ở đây mình giả lập đợi 3 giây như bạn yêu cầu
-    await Future.delayed(const Duration(seconds: 3));
+    if (otp.length < 6) return;
 
-    if (mounted) {
-      // 2. Chuyển sang trang tạo mật khẩu mới
-      Navigator.pushReplacementNamed(context, AppRoutes.resetPassword);
+    if (_email == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error: Missing Email! Please go back."), backgroundColor: Colors.red)
+      );
+      return;
     }
+
+    print("🚀 Chuyển sang NewPassword với: Email=$_email, OTP=$otp");
+
+    Navigator.pushReplacementNamed(
+      context, 
+      AppRoutes.resetPassword, // Đảm bảo tên route này đúng trong routes.dart
+      arguments: {
+        "email": _email,
+        "otp": otp 
+      }
+    );
   }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -113,73 +147,46 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             const SizedBox(height: 10),
             const Text(
               "Enter OTP Code 🔐",
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black),
             ),
             const SizedBox(height: 12),
             Text(
-              "Please check your email inbox for a message from Smartify. Enter the one-time verification code below.",
+              "We sent a code to ${_email ?? 'your email'}.\nPlease check your inbox.",
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey[600],
-                height: 1.5,
-              ),
+              style: TextStyle(fontSize: 15, color: Colors.grey[600], height: 1.5),
             ),
             const SizedBox(height: 40),
 
-            // --- 4 Ô NHẬP OTP (TEXTFIELD THẬT) ---
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(4, (index) {
+              children: List.generate(6, (index) {
                 return SizedBox(
-                  width: 70, 
-                  height: 70,
+                  width: 45,
+                  height: 60,
                   child: TextField(
                     controller: _controllers[index],
                     focusNode: _focusNodes[index],
                     onChanged: (value) => _onChanged(value, index),
-                    
-                    // Cấu hình bàn phím
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                    
-                    // Giới hạn chỉ nhập 1 ký tự số
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     inputFormatters: [
                       LengthLimitingTextInputFormatter(1),
-                      FilteringTextInputFormatter.digitsOnly,
+                      FilteringTextInputFormatter.digitsOnly
                     ],
-                    
-                    // Trang trí ô nhập
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.grey[50], // Màu nền xám nhạt
-                      contentPadding: EdgeInsets.zero, // Để số nằm chính giữa
-                      
-                      // Viền khi bình thường (Ẩn hoặc xám nhạt)
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.grey.shade200), 
-                      ),
-                      
-                      // Viền khi đang nhập (Màu xanh chủ đạo)
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: primaryColor, width: 2), 
-                      ),
+                      fillColor: Colors.grey[50],
+                      contentPadding: EdgeInsets.zero,
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 2)),
                     ),
                   ),
                 );
               }),
             ),
-
             const SizedBox(height: 40),
 
-            // --- BỘ ĐẾM GIỜ & NÚT GỬI LẠI ---
             RichText(
               text: TextSpan(
                 text: "You can resend the code in ",
@@ -187,10 +194,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 children: [
                   TextSpan(
                     text: "$_resendSeconds",
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
                   ),
                   const TextSpan(text: " seconds"),
                 ],

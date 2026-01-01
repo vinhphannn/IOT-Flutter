@@ -1,6 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // 1. Import Provider
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../routes.dart';
@@ -8,11 +7,12 @@ import '../../services/room_service.dart';
 import '../../services/house_service.dart';
 import '../../models/device_model.dart';
 import '../../models/house_model.dart';
-import '../../providers/device_provider.dart'; // 2. Import Kho tổng
+import '../../providers/device_provider.dart';
 
 import '../device/category_devices_screen.dart';
 import 'home_weather_widget.dart';
 import 'home_devices_body.dart';
+// import '../../models/room_model.dart'; // Nếu không dùng thì có thể comment hoặc xóa dòng này
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,9 +30,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedRoomIndex = 0;
   List<String> _rooms = ["All Rooms"];
   
-  // Vợ ơi, mình bỏ _allDevices và _homeDisplayDevices cục bộ đi nhé
-  // Vì giờ mình dùng hàng xịn từ Provider rồi!
-
   @override
   void initState() {
     super.initState();
@@ -97,8 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _selectedRoomIndex = 0;
       });
 
-      // --- 3. QUAN TRỌNG: NẠP DỮ LIỆU VÀO KHO TỔNG (PROVIDER) ---
-      // Dòng này giúp fix lỗi ID=0 ở các trang sau
+      // --- NẠP DỮ LIỆU VÀO KHO TỔNG (PROVIDER) ---
+      // Dòng này cực quan trọng để đồng bộ ID và Trạng thái
       context.read<DeviceProvider>().setDevices(devicesFromDb);
     }
   }
@@ -119,23 +116,22 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setInt('currentHouseId', id);
   }
 
-  // Hàm điều hướng giữ nguyên
+  // --- SỬA LỖI Ở HÀM NÀY ---
   void _navigateToCategory(String type, String title) {
-    // Lưu ý: Nếu cần truyền danh sách thiết bị vào Category, 
-    // vợ có thể lấy từ Provider.of<DeviceProvider>(context, listen: false).devices
-    final allDevices = context.read<DeviceProvider>().devices;
-    
+    // Không cần lấy allDevices ở đây nữa vì trang Category tự lấy từ Provider rồi
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CategoryDevicesScreen(
-          categoryType: type, title: title, allDevices: allDevices,
+          categoryType: type, 
+          title: title,
+          // Đã xóa tham số allDevices gây lỗi
         ),
       ),
     );
   }
 
-  // --- GIAO DIỆN CHÍNH (Đã nâng cấp Consumer) ---
+  // --- GIAO DIỆN CHÍNH ---
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -158,21 +154,19 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Header (Chọn nhà & Icon)
+                // 1. Header
                 _buildHeader(context),
                 const SizedBox(height: 24),
                 
-                // 2. Weather Widget
+                // 2. Weather
                 const HomeWeatherWidget(),
                 const SizedBox(height: 24),
 
-                // 3. Devices Body - BỌC TRONG CONSUMER ĐỂ TỰ CẬP NHẬT
+                // 3. Devices Body (Dùng Consumer)
                 Consumer<DeviceProvider>(
                   builder: (context, deviceProvider, child) {
-                    // Lấy dữ liệu từ Kho tổng
                     final allDevices = deviceProvider.devices;
                     
-                    // Logic lọc thiết bị theo phòng (đưa từ hàm cũ vào đây)
                     List<Device> displayDevices;
                     if (_selectedRoomIndex == 0) {
                       displayDevices = allDevices;
@@ -189,7 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       onRoomChanged: (index) {
                         setState(() {
                           _selectedRoomIndex = index;
-                          // Không cần gọi _filterDevices nữa vì Consumer sẽ tự lo
                         });
                       },
                       onCategoryTap: _navigateToCategory,
@@ -204,7 +197,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Header vẫn giữ nguyên
   Widget _buildHeader(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

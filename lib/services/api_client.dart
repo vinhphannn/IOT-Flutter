@@ -7,19 +7,30 @@ import '../utils/navigation_service.dart';
 import '../routes.dart';
 
 class ApiClient {
-  // 1. Hàm bổ trợ để tránh lặp code
-  static Future<http.Response> _sendRequest(String method, String endpoint, {dynamic body}) async {
+  // 1. Hàm bổ trợ _sendRequest (Đã thêm tham số withToken)
+  static Future<http.Response> _sendRequest(String method, String endpoint, {dynamic body, bool withToken = true}) async {
     final url = Uri.parse('${AppConfig.baseUrl}$endpoint');
-    final headers = await _getHeaders();
+    
+    // Truyền withToken vào để quyết định có lấy Header Authorization không
+    final headers = await _getHeaders(withToken); 
     late http.Response response;
 
     try {
       switch (method.toUpperCase()) {
-        case 'GET': response = await http.get(url, headers: headers); break;
-        case 'POST': response = await http.post(url, headers: headers, body: jsonEncode(body)); break;
-        case 'PUT': response = await http.put(url, headers: headers, body: jsonEncode(body)); break;
-        case 'DELETE': response = await http.delete(url, headers: headers); break;
-        default: throw Exception("Method not supported");
+        case 'GET': 
+          response = await http.get(url, headers: headers); 
+          break;
+        case 'POST': 
+          response = await http.post(url, headers: headers, body: jsonEncode(body)); 
+          break;
+        case 'PUT': 
+          response = await http.put(url, headers: headers, body: jsonEncode(body)); 
+          break;
+        case 'DELETE': 
+          response = await http.delete(url, headers: headers); 
+          break;
+        default: 
+          throw Exception("Method not supported");
       }
       return _handleResponse(response);
     } on SocketException {
@@ -29,29 +40,44 @@ class ApiClient {
     }
   }
 
-  // 2. Các hàm Public (Vợ gọi từ Service)
-  static Future<http.Response> get(String endpoint) => _sendRequest('GET', endpoint);
-  static Future<http.Response> post(String endpoint, dynamic body) => _sendRequest('POST', endpoint, body: body);
-  static Future<http.Response> put(String endpoint, dynamic body) => _sendRequest('PUT', endpoint, body: body);
+  // 2. Các hàm Public (Đã cập nhật để nhận tham số withToken)
+  static Future<http.Response> get(String endpoint, {bool withToken = true}) => 
+      _sendRequest('GET', endpoint, withToken: withToken);
 
-  // 3. Header tự động lấy Token
-  static Future<Map<String, String>> _getHeaders() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('jwt_token');
-    return {
+  static Future<http.Response> post(String endpoint, dynamic body, {bool withToken = true}) => 
+      _sendRequest('POST', endpoint, body: body, withToken: withToken);
+
+  static Future<http.Response> put(String endpoint, dynamic body, {bool withToken = true}) => 
+      _sendRequest('PUT', endpoint, body: body, withToken: withToken);
+
+  static Future<http.Response> delete(String endpoint, {bool withToken = true}) => 
+      _sendRequest('DELETE', endpoint, withToken: withToken);
+
+  // 3. Header: Chỉ gắn Token nếu withToken == true
+  static Future<Map<String, String>> _getHeaders(bool withToken) async {
+    Map<String, String> headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
     };
+
+    if (withToken) {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('jwt_token');
+      if (token != null) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    }
+    return headers;
   }
 
-  // 4. Xử lý lỗi TẬP TRUNG (QUAN TRỌNG NHẤT)
+  // 4. Xử lý lỗi TẬP TRUNG (Auto Logout khi 401)
   static Future<http.Response> _handleResponse(http.Response response) async {
     if (response.statusCode == 401) {
       print("🚨 401 UNAUTHORIZED -> Auto Logout");
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.remove('jwt_token'); // Xóa token thôi, giữ lại seenOnboarding
+      await prefs.remove('jwt_token'); 
       
+      // Đá về màn hình Login/Option
       NavigationService.navigatorKey.currentState?.pushNamedAndRemoveUntil(
         AppRoutes.loginOptions, (route) => false,
       );
@@ -60,11 +86,13 @@ class ApiClient {
     return response;
   }
 
+  // 5. Kiểm tra kết nối (Ping server)
   static Future<bool> checkConnection() async {
     try {
+      // Ping không cần token, nên gọi get với withToken: false cho an toàn
       final response = await http.get(Uri.parse('${AppConfig.baseUrl}/auth/ping'))
           .timeout(const Duration(seconds: 3));
-      return true; 
+      return response.statusCode == 200; 
     } catch (_) { return false; }
   }
 }

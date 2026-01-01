@@ -79,10 +79,20 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => const SignUpCompleteScreen());
       case forgotPassword:
         return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
+      
+      // --- CÁC CHỖ SỬA QUAN TRỌNG ĐỂ TRUYỀN DATA ---
       case otpVerification:
-        return MaterialPageRoute(builder: (_) => const OtpVerificationScreen());
+        return MaterialPageRoute(
+          builder: (_) => const OtpVerificationScreen(),
+          settings: settings, // <--- QUAN TRỌNG: Phải có dòng này mới nhận được Email
+        );
+      
       case resetPassword:
-        return MaterialPageRoute(builder: (_) => const NewPasswordScreen());
+        return MaterialPageRoute(
+          builder: (_) => const NewPasswordScreen(),
+          settings: settings, // <--- QUAN TRỌNG: Phải có dòng này mới nhận được OTP & Email
+        );
+
       case resetPasswordSuccess:
         return MaterialPageRoute(builder: (_) => const ResetPasswordSuccessScreen());
       
@@ -108,10 +118,11 @@ class AppRoutes {
         final deviceItem = settings.arguments as DeviceItem;
         return MaterialPageRoute(
           builder: (_) => ConnectDeviceScreen(device: deviceItem),
+          // Ở đây không cần settings: settings vì mình đã truyền qua constructor rồi
         );
 
       case connectedSuccess:
-        // SỬA LỖI Ở ĐÂY: Nhận Device (Model thật)
+        // Nhận Device (Model thật)
         final device = settings.arguments as Device;
         return MaterialPageRoute(
           builder: (_) => ConnectedSuccessScreen(device: device),

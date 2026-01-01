@@ -24,6 +24,39 @@ class _SignInScreenState extends State<SignInScreen> {
   // Controller
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
+  // --- GOOGLE SIGN IN (COPY Y CHANG TỪ SIGNUP SANG) ---
+  void _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+    
+    AuthService authService = AuthService();
+    bool success = await authService.signInWithGoogle();
+
+    if (success && mounted) {
+      try {
+        HouseService houseService = HouseService();
+        final houses = await houseService.fetchMyHouses();
+        final prefs = await SharedPreferences.getInstance();
+
+        if (houses.isNotEmpty) {
+          // Có nhà -> Vào Home
+          await prefs.setBool('is_setup_completed', true);
+          await prefs.setInt('currentHouseId', houses[0].id);
+          if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
+        } else {
+          // Chưa có nhà -> Setup
+          await prefs.setBool('is_setup_completed', false);
+          if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
+        }
+      } catch (e) {
+        // Lỗi check nhà -> Về Setup
+        if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
+      }
+    } else {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Google Sign-In Failed."), backgroundColor: Colors.red));
+    }
+    
+    if (mounted) setState(() => _isLoading = false);
+  }
 
   // --- HÀM XỬ LÝ ĐĂNG NHẬP (NÃO BỘ) ---
   // --- HÀM XỬ LÝ ĐĂNG NHẬP (LOGIC CHUẨN) ---

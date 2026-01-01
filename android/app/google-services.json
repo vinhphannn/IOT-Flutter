@@ -1,1 +1,46 @@
-{"installed":{"client_id":"639143425508-pake93rdok6c495cijhcdb7e32par7db.apps.googleusercontent.com","project_id":"iot-smart-home-482216","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs"}}
+{
+  "project_info": {
+    "project_number": "639143425508",
+    "project_id": "iot-smart-home-482216",
+    "storage_bucket": "iot-smart-home-482216.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:639143425508:android:c5207f7d40e981577c43f1",
+        "android_client_info": {
+          "package_name": "com.example.flutter_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "639143425508-muab1s9vdj2ill6ctmt7407fomr392r7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYWHycWAesjCY-CYNP8zhzheND6ow-s9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "639143425508-muab1s9vdj2ill6ctmt7407fomr392r7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "639143425508-al5a9ljoivrj0t3fqko1r4u157mrmink.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.flutterMobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
