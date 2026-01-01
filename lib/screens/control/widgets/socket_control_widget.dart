@@ -3,6 +3,7 @@ import 'package:provider/provider.dart'; // Bắt buộc phải có
 import '../../../models/device_model.dart';
 import '../../../providers/device_provider.dart'; // Import Kho tổng
 import '../../device/log/device_log_screen.dart';
+import '../../device/DeviceEnergyChartScreen.dart';
 
 class SocketControlWidget extends StatelessWidget {
   final int deviceId; // Nhận ID thay vì Device object
@@ -141,7 +142,15 @@ class SocketControlWidget extends StatelessWidget {
   Widget _buildExtraInfo(BuildContext context, Device device, double kwh) {
     return Column(
       children: [
-        _buildInfoCard(Icons.eco_outlined, "Điện năng hôm nay", "${kwh.toStringAsFixed(3)} kWh", Colors.green, () {}),
+        _buildInfoCard(Icons.eco_outlined, "Điện năng hôm nay", "${kwh.toStringAsFixed(3)} kWh", Colors.green, () {
+        // --- CHUYỂN SANG TRANG BIỂU ĐỒ MỚI ---
+        Navigator.push(
+            context, 
+            MaterialPageRoute(
+                builder: (context) => DeviceEnergyChartScreen(deviceId: device.id)
+            )
+        );
+    }),
         const SizedBox(height: 12),
         _buildInfoCard(Icons.history_rounded, "Lịch sử hoạt động", "Xem chi tiết", Colors.blue, () {
           Navigator.push(context, MaterialPageRoute(builder: (context) => DeviceLogScreen(deviceId: device.id)));

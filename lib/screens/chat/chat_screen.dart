@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart'; // Import thư viện này để hiển thị text AI đẹp
+import '../../services/chat_ai_service.dart'; // Import Service AI
 
 // Model tin nhắn
 class ChatMessage {
@@ -19,48 +21,59 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  
+  // 1. Gọi Service AI
+  final ChatAiService _chatService = ChatAiService();
+  bool _isLoading = false; // Biến để hiện trạng thái "Đang soạn tin..."
 
-  // Dữ liệu mẫu y hệt thiết kế
+  // Dữ liệu mẫu ban đầu
   final List<ChatMessage> _messages = [
     ChatMessage(text: "Hi Bobo! 🤖", isUser: true, time: "09:41"),
-    ChatMessage(text: "Hello there! 👋 How can I assist you today?", isUser: false, time: "09:41"),
-    ChatMessage(text: "I just set up my Smartify account. What cool things can I do with it?", isUser: true, time: "09:41"),
-    ChatMessage(text: "Awesome! 🎉 With Smartify, you can control devices, set up automation, manage energy, and more! What are you interested in exploring first?", isUser: false, time: "09:41"),
+    ChatMessage(text: "Hello! 👋 Tui là trợ lý ảo Smartify đây. Tui giúp gì được cho bạn nè?", isUser: false, time: "09:41"),
   ];
 
   // Hàm gửi tin nhắn
-  void _sendMessage() {
-    if (_textController.text.trim().isEmpty) return;
+  void _sendMessage() async {
+    String userText = _textController.text.trim();
+    if (userText.isEmpty) return;
 
+    // 1. Hiện tin nhắn của User ngay lập tức
     setState(() {
-      // 1. Thêm tin nhắn của mình
       _messages.add(ChatMessage(
-        text: _textController.text,
+        text: userText,
         isUser: true,
-        time: "${DateTime.now().hour}:${DateTime.now().minute}",
+        time: _getCurrentTime(),
       ));
-
-      // 2. Giả lập Bobo trả lời sau 1 giây
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _messages.add(ChatMessage(
-              text: "Hmm, interesting! Tell me more about that. 🤔", // Câu trả lời mẫu
-              isUser: false,
-              time: "${DateTime.now().hour}:${DateTime.now().minute}",
-            ));
-            _scrollToBottom();
-          });
-        }
-      });
-      
-      _textController.clear();
-      _scrollToBottom();
+      _isLoading = true; // Bật chế độ đang gõ
     });
+    
+    _textController.clear();
+    _scrollToBottom();
+
+    // 2. Gọi API Gemini (AI trả lời)
+    String aiResponse = await _chatService.sendMessage(userText);
+
+    // 3. Cập nhật giao diện khi có câu trả lời
+    if (mounted) {
+      setState(() {
+        _isLoading = false; // Tắt chế độ đang gõ
+        _messages.add(ChatMessage(
+          text: aiResponse,
+          isUser: false,
+          time: _getCurrentTime(),
+        ));
+      });
+      _scrollToBottom();
+    }
+  }
+
+  // Hàm lấy giờ hiện tại (VD: 10:30)
+  String _getCurrentTime() {
+    final now = DateTime.now();
+    return "${now.hour}:${now.minute.toString().padLeft(2, '0')}";
   }
 
   void _scrollToBottom() {
-    // Cuộn xuống cuối list
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -104,8 +117,22 @@ class _ChatScreenState extends State<ChatScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(20),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isLoading ? 1 : 0), // Cộng thêm 1 nếu đang load
               itemBuilder: (context, index) {
+                // Nếu đang ở item cuối cùng và đang loading -> Hiện cục "Đang gõ..."
+                if (_isLoading && index == _messages.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 10, bottom: 20),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Bobo is typing...", 
+                        style: TextStyle(color: Colors.grey[500], fontStyle: FontStyle.italic, fontSize: 12),
+                      ),
+                    ),
+                  );
+                }
+
                 final msg = _messages[index];
                 return _buildMessageBubble(msg, primaryColor);
               },
@@ -197,7 +224,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 12),
             
-            // Bong bóng chat Bobo
+            // Bong bóng chat Bobo (Dùng Markdown)
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,9 +240,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         bottomRight: Radius.circular(20),
                       ),
                     ),
-                    child: Text(
-                      msg.text,
-                      style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.4),
+                    // SỬ DỤNG MARKDOWN BODY CHO AI
+                    child: MarkdownBody(
+                      data: msg.text,
+                      styleSheet: MarkdownStyleSheet(
+                        p: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.4),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -228,7 +258,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
     } else {
-      // Tin nhắn của User (Màu xanh)
+      // Tin nhắn của User (Màu xanh) - Giữ nguyên Text thường
       return Padding(
         padding: const EdgeInsets.only(bottom: 20),
         child: Row(

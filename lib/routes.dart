@@ -28,16 +28,15 @@ import 'screens/device/connect_device_screen.dart';
 import 'screens/device/connected_success_screen.dart';
 import 'screens/device/qr_scan_screen.dart';
 import 'screens/control/device_control_screen.dart';
+import 'screens/smart/smart_screen.dart'; // Import trang Smart mới
 
 class AppRoutes {
   // --- ĐỊNH NGHĨA TÊN ROUTES ---
   static const String splash = '/';
   static const String onboarding = '/onboarding';
-  static const String terms = '/terms';
   static const String loginOptions = '/login-options';
   static const String signIn = '/sign-in';
   static const String signUp = '/sign-up';
-  static const String otp = '/otp';
   static const String forgotPassword = '/forgot-password';
   static const String home = '/home';
   static const String signUpSetup = '/setup';
@@ -53,6 +52,7 @@ class AppRoutes {
   static const String chat = '/chat';
   static const String voiceAssistant = '/voice-assistant';
   static const String controlDevice = '/control-device';
+  static const String smart = '/smart'; // Route mới cho Smart
 
   // --- HÀM ĐIỀU HƯỚNG ---
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -98,13 +98,15 @@ class AppRoutes {
       
       // 3. Màn hình chính
       case home:
-        return MaterialPageRoute(builder: (_) => const MainScreen());
+        return MaterialPageRoute(builder: (_) => const MainScreen()); // MainScreen chứa cả Home và Smart
       case notification:
         return MaterialPageRoute(builder: (_) => const NotificationScreen());
       case chat:
         return MaterialPageRoute(builder: (_) => const ChatScreen());
       case voiceAssistant:
         return MaterialPageRoute(builder: (_) => const VoiceAssistantScreen());
+      case smart:
+        return MaterialPageRoute(builder: (_) => const SmartScreen());
 
       // 4. Màn hình thiết bị (Add, Connect, Control)
       case addDevice:
@@ -115,25 +117,30 @@ class AppRoutes {
 
       case connectDevice:
         // Nhận DeviceItem (lúc quét)
-        final deviceItem = settings.arguments as DeviceItem;
-        return MaterialPageRoute(
-          builder: (_) => ConnectDeviceScreen(device: deviceItem),
-          // Ở đây không cần settings: settings vì mình đã truyền qua constructor rồi
-        );
+        if (args is DeviceItem) {
+          return MaterialPageRoute(
+            builder: (_) => ConnectDeviceScreen(device: args),
+          );
+        }
+        return _errorRoute();
 
       case connectedSuccess:
         // Nhận Device (Model thật)
-        final device = settings.arguments as Device;
-        return MaterialPageRoute(
-          builder: (_) => ConnectedSuccessScreen(device: device),
-        );
+        if (args is Device) {
+          return MaterialPageRoute(
+            builder: (_) => ConnectedSuccessScreen(device: args),
+          );
+        }
+        return _errorRoute();
 
       case controlDevice:
         // Nhận Device để điều khiển
-        final deviceToControl = settings.arguments as Device;
-        return MaterialPageRoute(
-          builder: (_) => DeviceControlScreen(device: deviceToControl),
-        );
+        if (args is Device) {
+          return MaterialPageRoute(
+            builder: (_) => DeviceControlScreen(device: args),
+          );
+        }
+        return _errorRoute();
 
       // 5. Màn hình tạm (Placeholder)
       default:
