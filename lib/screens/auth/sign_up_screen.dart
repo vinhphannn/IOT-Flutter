@@ -1,11 +1,11 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
-import 'package:shared_preferences/shared_preferences.dart'; // 1. Thêm cái này
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/social_button.dart'; 
 import '../../routes.dart';
 import '../../services/auth_service.dart';
-import '../../services/house_service.dart'; // 2. Thêm cái này để check nhà
+import '../../services/house_service.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -22,54 +22,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
 
-  // --- HÀM XỬ LÝ GOOGLE LOGIN (MỚI) ---
+  // --- GOOGLE LOGIN ---
   void _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
     
     AuthService authService = AuthService();
-    // 1. Gọi Google Login lấy Token
     bool success = await authService.signInWithGoogle();
 
     if (success && mounted) {
-      // 2. Login thành công -> Kiểm tra xem đã có nhà chưa
       try {
         HouseService houseService = HouseService();
         final houses = await houseService.fetchMyHouses();
         final prefs = await SharedPreferences.getInstance();
 
         if (houses.isNotEmpty) {
-          // A. ĐÃ CÓ NHÀ -> Vào Home
           await prefs.setBool('is_setup_completed', true);
           await prefs.setInt('currentHouseId', houses[0].id);
-          
-          if (mounted) {
-            Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Welcome to Smartify!"), backgroundColor: Colors.green));
-          }
+          if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (route) => false);
         } else {
-          // B. CHƯA CÓ NHÀ -> Vào Setup
           await prefs.setBool('is_setup_completed', false);
-          
-          if (mounted) {
-            Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account created! Let's setup your home."), backgroundColor: Colors.green));
-          }
+          if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
         }
       } catch (e) {
-        // Lỗi mạng khi check nhà -> Về Setup cho an toàn
         if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
       }
     } else {
-      // Login thất bại hoặc hủy
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Google Sign-In Failed."), backgroundColor: Colors.red));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Google Sign-In Failed."), backgroundColor: Colors.red));
     }
     
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // --- HÀM ĐĂNG KÝ THƯỜNG (Giữ nguyên) ---
+  // --- SIGN UP THƯỜNG ---
   void _handleSignUp() async {
     if (!_isChecked) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please agree to Terms & Conditions first!"), backgroundColor: Colors.red));
@@ -86,18 +70,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     bool registerSuccess = await authService.register(_emailController.text, _passController.text);
 
     if (registerSuccess) {
-      // Đăng ký thành công -> Tự động đăng nhập luôn
       Map<String, dynamic>? loginResult = await authService.login(_emailController.text, _passController.text);
 
       if (loginResult != null && mounted) {
-        // Vào thẳng Setup (vì mới đăng ký thì chưa có nhà)
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.signUpSetup, (route) => false);
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account created! Let's setup your home."), backgroundColor: Colors.green));
       } else {
-        if (mounted) {
-           Navigator.pushReplacementNamed(context, AppRoutes.signIn);
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registration successful! Please login."), backgroundColor: Colors.green));
-        }
+        if (mounted) Navigator.pushReplacementNamed(context, AppRoutes.signIn);
       }
     } else {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Registration Failed! Email might be taken."), backgroundColor: Colors.red));
@@ -108,14 +86,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (Giữ nguyên phần UI, chỉ sửa nút Google) ...
     final primaryColor = Theme.of(context).primaryColor;
     final size = MediaQuery.of(context).size;
 
     return Stack(
       children: [
         Scaffold(
-          // ... AppBar ...
           backgroundColor: Colors.white,
           appBar: AppBar(
             backgroundColor: Colors.white,
@@ -130,7 +106,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ... (Các Text và Input giữ nguyên) ...
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -155,7 +130,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                 const SizedBox(height: 20),
 
-                // Checkbox
                 Row(
                   children: [
                     SizedBox(
@@ -174,7 +148,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           text: "I agree to Smartify ",
                           style: TextStyle(color: Colors.grey[600], fontSize: 13),
                           children: [
-                            TextSpan(text: "Terms & Conditions.", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold), recognizer: TapGestureRecognizer()..onTap = () {}),
+                            TextSpan(text: "Terms & Conditions.", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
@@ -183,7 +157,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 20),
                 
-                // Login Link
                 Center(
                   child: RichText(
                     text: TextSpan(
@@ -203,16 +176,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 Center(child: Text("or", style: TextStyle(color: Colors.grey[400]))),
                 const SizedBox(height: 30),
 
-                // --- NÚT GOOGLE ĐÃ GẮN HÀM ---
                 SocialButton(
                   label: "Continue with Google",
                   iconPath: "assets/icons/google.png",
                   fallbackIcon: Icons.g_mobiledata,
-                  onPressed: _handleGoogleSignIn, // <--- GẮN Ở ĐÂY
+                  onPressed: _handleGoogleSignIn,
                 ),
                 const SizedBox(height: 15),
-                // ... Các nút khác ...
-                 SocialButton(
+                SocialButton(
                   label: "Continue with Apple",
                   iconPath: "assets/icons/apple.png",
                   fallbackIcon: Icons.apple,
@@ -236,7 +207,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ),
         
-        // Loading Overlay
         if (_isLoading)
           Positioned.fill(
             child: BackdropFilter(
@@ -244,19 +214,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               child: Container(
                 color: Colors.black.withOpacity(0.75),
                 child: Center(
-                  child: Container(
-                    width: size.width * 0.8,
-                    padding: const EdgeInsets.symmetric(vertical: 70),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: primaryColor, strokeWidth: 5),
-                        const SizedBox(height: 30),
-                        const Text("Processing...", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
+                  child: const CircularProgressIndicator(),
                 ),
               ),
             ),
@@ -265,7 +223,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // Helpers
   Widget _buildLabel(String text) => Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14));
   
   Widget _buildTextField({required TextEditingController controller, required String hint, required IconData icon, bool isPassword = false}) {

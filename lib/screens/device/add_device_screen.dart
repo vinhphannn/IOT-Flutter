@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-// Import 2 file Tab con
-import 'tabs/nearby_scan_tab.dart';
-import 'tabs/manual_add_tab.dart'; // Đảm bảo vợ đã có file này trong thư mục tabs rồi nhé
+import 'tabs/nearby_scan_tab.dart'; // <--- 1. Import đúng file Radar chồng gửi lúc nãy
+import 'tabs/manual_add_tab.dart'; 
 import '../../routes.dart';
 
 class AddDeviceScreen extends StatefulWidget {
@@ -12,8 +11,7 @@ class AddDeviceScreen extends StatefulWidget {
 }
 
 class _AddDeviceScreenState extends State<AddDeviceScreen> {
-  // Chỉ còn lại biến để chuyển Tab
-  int _selectedTab = 0; // 0: Nearby, 1: Manual
+  int _selectedTab = 0; 
 
   @override
   Widget build(BuildContext context) {
@@ -31,26 +29,14 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
         ),
         title: const Text(
           "Add Device",
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner, color: Colors.black),
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.scanQR);
-            },
-          ),
-        ],
       ),
       body: Column(
         children: [
           const SizedBox(height: 10),
 
-          // 1. THANH ĐIỀU HƯỚNG TAB (GIỮ NGUYÊN)
+          // 1. THANH ĐIỀU HƯỚNG TAB
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
             padding: const EdgeInsets.all(4),
@@ -66,12 +52,11 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
             ),
           ),
 
-          // 2. NỘI DUNG CHÍNH (THAY ĐỔI THEO TAB)
+          // 2. NỘI DUNG CHÍNH
           Expanded(
             child: _selectedTab == 0
-                // Tab 0: Gọi file NearbyScanTab
-                ? const NearbyScanTab() 
-                // Tab 1: Gọi file ManualAddTab (Vợ nhớ chuyển file manual_add_tab.dart vào thư mục tabs luôn cho gọn nhé)
+                // Tab 0: Gọi đúng tên class ScanNearbyScreen (file Radar độc lập)
+                ? const ScanNearbyScreen() 
                 : const ManualAddTab(), 
           ),
         ],
@@ -79,26 +64,19 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
     );
   }
 
-  // Widget vẽ cái nút Tab
   Widget _buildTabItem(String text, int index, Color primaryColor) {
     final isSelected = _selectedTab == index;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedTab = index),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200), // Thêm hiệu ứng chuyển mượt
+          duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected ? primaryColor : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
+                ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))]
                 : null,
           ),
           child: Text(
