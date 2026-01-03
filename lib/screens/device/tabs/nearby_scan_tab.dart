@@ -6,14 +6,15 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../routes.dart'; 
 
-// --- MODEL DEVICE ITEM (Cập nhật để chứa thiết bị thật) ---
+// --- MODEL DEVICE ITEM ---
+// (Lớp này phải trùng khớp với cái mà routes.dart đang import)
 class DeviceItem {
   final IconData icon;
   final String name;
   final Color color;
   final String macAddress;
   final String type;
-  final BluetoothDevice? device; // Chứa thiết bị thật để kết nối
+  final BluetoothDevice? device; 
 
   DeviceItem({
     required this.name,
@@ -35,20 +36,18 @@ class NearbyScanTab extends StatefulWidget {
 class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateMixin {
   // --- BIẾN LOGIC ---
   bool _isScanning = false;
-  List<DeviceItem> _foundDevices = []; // Danh sách thiết bị thật tìm thấy
+  List<DeviceItem> _foundDevices = []; 
   late AnimationController _rippleController;
   StreamSubscription? _scanSubscription;
 
   @override
   void initState() {
     super.initState();
-    // Animation Radar (Giữ nguyên của vợ)
     _rippleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
 
-    // Bắt đầu quét thật ngay khi vào màn hình
     _checkPermissionsAndStartScan();
   }
 
@@ -76,36 +75,32 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
     _startRealScan();
   }
 
-  // --- 2. LOGIC QUÉT THẬT (Thay thế hàm giả lập cũ) ---
+  // --- 2. LOGIC QUÉT THẬT ---
   void _startRealScan() async {
     setState(() {
       _isScanning = true;
-      _foundDevices.clear(); // Xóa sạch danh sách cũ
+      _foundDevices.clear(); 
     });
 
-    // Lắng nghe sóng Bluetooth
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       if (mounted) {
         setState(() {
-          // Lọc thiết bị: Chỉ lấy SmartMeter hoặc ESP32
           final filtered = results.where((r) {
             String name = r.device.platformName;
             return name.isNotEmpty && 
                    (name.contains("SmartMeter") || name.contains("ESP32"));
           }).toList();
 
-          // Sắp xếp theo sóng mạnh nhất (RSSI)
           filtered.sort((a, b) => b.rssi.compareTo(a.rssi));
 
-          // Chuyển đổi sang DeviceItem để vẽ lên Radar
           _foundDevices = filtered.map((r) {
             return DeviceItem(
               name: r.device.platformName,
-              icon: Icons.developer_board, // Icon ESP32
-              color: Colors.blueAccent,    // Màu chủ đạo
+              icon: Icons.developer_board, 
+              color: Colors.blueAccent,    
               macAddress: r.device.remoteId.str,
               type: "ESP32",
-              device: r.device, // Lưu thiết bị thật vào đây
+              device: r.device, 
             );
           }).toList();
         });
@@ -113,17 +108,14 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
     });
 
     try {
-      // Quét trong 10 giây
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
     } catch (e) {
       debugPrint("Lỗi scan: $e");
     }
 
-    // Sau khi quét xong
     if (mounted) {
       setState(() {
         _isScanning = false;
-        // Nếu tìm thấy thì dừng hiệu ứng sóng
         if (_foundDevices.isNotEmpty) _rippleController.stop();
       });
     }
@@ -134,17 +126,15 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
     if (FlutterBluePlus.isScanningNow) FlutterBluePlus.stopScan();
   }
 
-  // --- 3. LOGIC KẾT NỐI KHI CHỌN ---
+  // --- 3. LOGIC KẾT NỐI (ĐÃ SỬA) ---
   void _connectToDevice(DeviceItem item) {
     _stopScan();
-    // Chuyển sang màn hình Wifi Selection (Dùng logic Map như file routes đã sửa)
+    
+    // 👇 SỬA Ở ĐÂY: Gửi nguyên object item đi, không bọc trong Map nữa
     Navigator.pushNamed(
       context,
       AppRoutes.connectDevice,
-      arguments: {
-        'device': item.device, 
-        'type': item.type,
-      },
+      arguments: item, // <--- Routes đang chờ DeviceItem, gửi đúng DeviceItem là khớp!
     );
   }
 
@@ -164,7 +154,7 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
           ),
           const SizedBox(height: 10),
 
-          // Hướng dẫn (Giữ nguyên)
+          // Hướng dẫn
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
@@ -189,7 +179,7 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
 
           const SizedBox(height: 40),
 
-          // --- RADAR ANIMATION (Giữ nguyên UI của vợ) ---
+          // --- RADAR ANIMATION ---
           SizedBox(
             width: 320,
             height: 320,
@@ -200,7 +190,6 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
                 _buildRing(220),
                 _buildRing(140),
 
-                // Avatar ở giữa
                 Container(
                   width: 80, height: 80,
                   decoration: BoxDecoration(
@@ -214,7 +203,6 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
                   child: const Icon(Icons.person, size: 50, color: Colors.grey),
                 ),
 
-                // Hiệu ứng sóng lan tỏa
                 if (_isScanning)
                   AnimatedBuilder(
                     animation: _rippleController,
@@ -233,15 +221,14 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
                     },
                   ),
 
-                // --- VẼ THIẾT BỊ THẬT LÊN VÒNG TRÒN ---
+                // --- VẼ THIẾT BỊ ---
                 if (!_isScanning || _foundDevices.isNotEmpty)
                   ...List.generate(_foundDevices.length, (index) {
-                    // Logic rải đều thiết bị theo hình tròn (như cũ)
                     final double angle = (2 * pi / _foundDevices.length) * index - (pi / 2);
                     const double radius = 110; 
 
                     return Positioned(
-                      left: 160 + radius * cos(angle) - 25, // 160 là tâm của box 320
+                      left: 160 + radius * cos(angle) - 25,
                       top: 160 + radius * sin(angle) - 25,
                       child: _buildDeviceIcon(_foundDevices[index]),
                     );
@@ -252,7 +239,7 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
 
           const SizedBox(height: 40),
 
-          // Nút Connect / Scan Again
+          // Nút Connect
           if (!_isScanning)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -262,10 +249,8 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
                 child: ElevatedButton(
                   onPressed: () {
                     if (_foundDevices.isNotEmpty) {
-                      // Kết nối con mạnh nhất (đầu danh sách)
                       _connectToDevice(_foundDevices[0]);
                     } else {
-                      // Quét lại
                       _startRealScan();
                     }
                   },
@@ -298,8 +283,6 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
     );
   }
 
-  // --- WIDGET CON (Giữ nguyên thiết kế) ---
-
   Widget _buildRing(double size) {
     return Container(
       width: size,
@@ -313,7 +296,7 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
 
   Widget _buildDeviceIcon(DeviceItem device) {
     return GestureDetector(
-      onTap: () => _connectToDevice(device), // Bấm vào icon là kết nối
+      onTap: () => _connectToDevice(device), 
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -325,7 +308,7 @@ class _NearbyScanTabState extends State<NearbyScanTab> with TickerProviderStateM
               boxShadow: [
                 BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4)),
               ],
-              border: Border.all(color: device.color, width: 2), // Viền màu theo thiết bị
+              border: Border.all(color: device.color, width: 2), 
             ),
             child: Icon(device.icon, color: device.color),
           ),

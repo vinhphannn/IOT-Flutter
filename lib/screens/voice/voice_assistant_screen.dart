@@ -1,14 +1,12 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:math'; // Import để dùng hàm sin, pi, pow cho sóng
 import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt; // Nhớ import thư viện này
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:shared_preferences/shared_preferences.dart';
 import '/models/device_model.dart';
 import '/services/device_service.dart';
 
-import 'package:shared_preferences/shared_preferences.dart'; // <--- NHỚ THÊM CÁI NÀY
-
 class VoiceAssistantScreen extends StatefulWidget {
-  // Cần truyền danh sách thiết bị vào để so sánh tên
   final List<Device> devices; 
 
   const VoiceAssistantScreen({super.key, required this.devices});
@@ -21,41 +19,39 @@ class _VoiceAssistantScreenState extends State<VoiceAssistantScreen> with Ticker
   late AnimationController _orbController;
   late AnimationController _waveController;
 
-  // --- PHẦN NÃO BỘ (LOGIC) ---
   final stt.SpeechToText _speech = stt.SpeechToText();
   final DeviceService _deviceService = DeviceService();
   
-  String _statusText = "Đang lắng nghe..."; // Text trạng thái nhỏ
-  String _spokenText = ""; // Text to hiển thị câu vợ nói
-  bool _isProcessing = false; // Biến check xem có đang xử lý lệnh không
-List<Device> _workingDevices = [];
+  String _statusText = "Nhấn vào quả cầu để nói..."; 
+  String _spokenText = ""; 
+  bool _isProcessing = false; 
+  List<Device> _workingDevices = [];
+
   @override
   void initState() {
     super.initState();
-    // 1. Setup Animation (Giữ nguyên của vợ)
+    // 1. Animation Quả cầu (Thở)
     _orbController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
+    ); 
 
+    // 2. Animation Sóng âm
     _waveController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: const Duration(milliseconds: 2000),
     )..repeat();
-// --- LOGIC MỚI: TỰ ĐỘNG TẢI THIẾT BỊ ---
-    _workingDevices = widget.devices; // Lấy từ bên ngoài truyền vào trước
+
+    _workingDevices = widget.devices; 
     
     if (_workingDevices.isEmpty) {
-        // Nếu bên ngoài không truyền (ví dụ gọi từ MainScreen), tự đi tải
-        _fetchDevicesAndStartListening();
+      _fetchDevices();
     } else {
-        // Có sẵn rồi thì nghe luôn
-        _initSpeech();
+      _initSpeech();
     }
   }
 
-  // Hàm tự tải thiết bị từ API
-  Future<void> _fetchDevicesAndStartListening() async {
+  Future<void> _fetchDevices() async {
       try {
           final prefs = await SharedPreferences.getInstance();
           int? houseId = prefs.getInt('currentHouseId');
@@ -64,51 +60,57 @@ List<Device> _workingDevices = [];
               if (mounted) {
                   setState(() {
                       _workingDevices = devices;
-                      _statusText = "Đã tìm thấy ${_workingDevices.length} thiết bị";
                   });
-                  // Tải xong thì bắt đầu nghe
                   _initSpeech(); 
               }
-          } else {
-              if (mounted) setState(() => _statusText = "Không tìm thấy Nhà!");
           }
       } catch (e) {
-          print("Lỗi tải thiết bị: $e");
+          debugPrint("Lỗi tải thiết bị: $e");
       }
   }
 
-  // Hàm khởi tạo và bắt đầu nghe
   Future<void> _initSpeech() async {
     bool available = await _speech.initialize(
       onStatus: (status) {
         if (mounted) {
-            // Cập nhật trạng thái (Listening, NotListening...)
             if (status == 'listening') {
                  setState(() => _statusText = "Mình đang nghe đây...");
+                 _orbController.repeat(reverse: true); 
             } else if (status == 'notListening') {
-                 if (!_isProcessing) setState(() => _statusText = "Nhấn mic để nói lại");
+                 if (!_isProcessing) {
+                   setState(() => _statusText = "Nhấn vào quả cầu để nói lại");
+                   _orbController.stop(); 
+                   _orbController.value = 0.0;
+                 }
             }
         }
       },
-      onError: (error) => print('Error: $error'),
+      onError: (error) => debugPrint('Error: $error'),
     );
 
-    if (available) {
-      _startListening();
-    } else {
+    if (!available) {
       setState(() => _statusText = "Quyền truy cập bị từ chối!");
+    }
+  }
+
+  void _toggleListening() {
+    if (_speech.isListening) {
+      _speech.stop();
+      _orbController.stop();
+      _orbController.value = 0.0;
+    } else {
+      _startListening();
     }
   }
 
   void _startListening() {
     _speech.listen(
-      localeId: 'vi_VN', // Nghe tiếng Việt
+      localeId: 'vi_VN', 
       onResult: (val) {
         setState(() {
-          _spokenText = val.recognizedWords; // Hiện chữ vợ nói lên màn hình
+          _spokenText = val.recognizedWords; 
         });
 
-        // Nếu câu nói đã xong (ngừng nói khoảng 1s)
         if (val.finalResult) {
           _processCommand(val.recognizedWords.toLowerCase());
         }
@@ -116,13 +118,12 @@ List<Device> _workingDevices = [];
     );
   }
 
-  // Hàm Xử Lý Lệnh (Brain)
-  // SỬA HÀM XỬ LÝ LỆNH: Dùng _workingDevices thay vì widget.devices
   void _processCommand(String command) async {
     setState(() {
       _isProcessing = true;
       _statusText = "Đang xử lý...";
-      _orbController.stop();
+      _orbController.stop(); 
+      _orbController.value = 1.0; 
     });
 
     bool? turnOn;
@@ -138,7 +139,6 @@ List<Device> _workingDevices = [];
     }
 
     bool found = false;
-    // --- SỬA Ở ĐÂY: Dùng _workingDevices ---
     for (var device in _workingDevices) { 
       if (command.contains(device.name.toLowerCase())) {
         bool success = await _deviceService.toggleDevice(device.id.toString(), turnOn);
@@ -156,25 +156,28 @@ List<Device> _workingDevices = [];
       _showResult("Không tìm thấy thiết bị nào khớp tên", success: false);
     }
   }
-  // Hàm hiển thị kết quả rồi tự đóng
+
   void _showResult(String message, {required bool success}) {
     if (!mounted) return;
     setState(() {
       _statusText = success ? "Thành công!" : "Thử lại nhé";
       _spokenText = message;
+      _isProcessing = false; 
+      _orbController.value = 0.0; 
     });
     
-    // Đợi 1.5 giây rồi đóng màn hình
-    Timer(const Duration(milliseconds: 1500), () {
-      if (mounted) Navigator.pop(context); 
-    });
+    if (success) {
+      Timer(const Duration(milliseconds: 2000), () {
+        if (mounted) Navigator.pop(context); 
+      });
+    }
   }
 
   @override
   void dispose() {
     _orbController.dispose();
     _waveController.dispose();
-    _speech.stop(); // Dừng nghe khi thoát
+    _speech.stop(); 
     super.dispose();
   }
 
@@ -182,25 +185,11 @@ List<Device> _workingDevices = [];
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // Nút Floating Action Button để bấm nghe lại nếu cần
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _speech.isListening ? Colors.red : Colors.blueAccent,
-        onPressed: () {
-            if (_speech.isListening) {
-                _speech.stop();
-            } else {
-                _startListening();
-                _orbController.repeat(reverse: true); // Chạy lại animation
-            }
-        },
-        child: Icon(_speech.isListening ? Icons.mic : Icons.mic_none),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       
       body: SafeArea(
         child: Column(
           children: [
-            // 1. Nút Đóng (X)
+            // 1. Nút Đóng
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Align(
@@ -212,26 +201,26 @@ List<Device> _workingDevices = [];
               ),
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 20),
 
-            // 2. Text hướng dẫn (Dynamic)
+            // 2. Trạng thái
             Text(
-              _statusText, // Thay đổi theo trạng thái: Đang nghe, Đang xử lý...
+              _statusText, 
               style: TextStyle(color: Colors.grey[600], fontSize: 16),
             ),
             
             const SizedBox(height: 40),
 
-            // 3. Text Lệnh giọng nói (Cái vợ nói sẽ hiện ở đây)
+            // 3. Lời nói
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 30),
               child: Text(
-                _spokenText.isEmpty ? "“Đang chờ vợ nói...”" : "“$_spokenText”",
+                _spokenText.isEmpty ? "..." : "“$_spokenText”",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: _isProcessing ? Colors.blue : Colors.black, // Đổi màu khi xử lý
+                  color: _isProcessing ? Colors.blue : Colors.black, 
                   height: 1.3,
                 ),
               ),
@@ -239,25 +228,19 @@ List<Device> _workingDevices = [];
 
             const Spacer(),
 
-            // 4. SÓNG ÂM (Giữ nguyên)
-         // 4. SÓNG ÂM
+            // 4. Sóng âm
             SizedBox(
-              height: 150,
+              height: 120, 
               width: double.infinity,
               child: AnimatedBuilder(
                 animation: _waveController,
                 builder: (context, child) {
-                  // LOGIC: Nếu đang nghe -> Cao 1.0 (Sóng to)
-                  //        Nếu không nghe -> Cao 0.0 (Đường thẳng)
-                  double waveScale = _speech.isListening ? 1.0 : 0.0; 
-                  
-                  // Muốn hiệu ứng mượt hơn (sóng nhỏ dần rồi tắt) khi đang xử lý:
-                  if (_isProcessing) waveScale = 0.1; 
+                  double waveScale = _speech.isListening ? 1.0 : 0.0;
+                  if (_isProcessing) waveScale = 0.3; 
 
                   return CustomPaint(
-                    // Truyền 2 tham số: Giá trị animation và Độ cao sóng
                     painter: SiriWavePainter(_waveController.value, waveScale),
-                    size: const Size(double.infinity, 150),
+                    size: const Size(double.infinity, 120),
                   );
                 },
               ),
@@ -265,37 +248,60 @@ List<Device> _workingDevices = [];
 
             const SizedBox(height: 30),
 
-            // 5. QUẢ CẦU SIRI (Giữ nguyên)
-            AnimatedBuilder(
-              animation: _orbController,
-              builder: (context, child) {
-                return Container(
-                  width: 80 + (_orbController.value * 20),
-                  height: 80 + (_orbController.value * 20),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const RadialGradient(
-                      colors: [
-                        Color(0xFF4B6EF6),
-                        Color(0xFF8B5CF6),
-                        Color(0xFFEC4899),
-                        Colors.blue,
+            // 5. NÚT QUẢ CẦU SIRI
+            GestureDetector(
+              onTap: _toggleListening, 
+              child: AnimatedBuilder(
+                animation: _orbController,
+                builder: (context, child) {
+                  double size = 80 + (_orbController.value * 25);
+                  
+                  return Container(
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        // --- SỬA LỖI Ở ĐÂY: Đảm bảo cả 2 trường hợp đều có đủ 4 màu ---
+                        colors: _speech.isListening || _isProcessing
+                            ? [ // 4 màu
+                                const Color(0xFF4B6EF6),
+                                const Color(0xFF8B5CF6),
+                                const Color(0xFFEC4899),
+                                Colors.blue,
+                              ]
+                            : [ // 4 màu (Đã thêm màu cuối cho đủ bộ)
+                                Colors.blueGrey.shade100,
+                                Colors.blueGrey.shade200,
+                                Colors.blueGrey.shade300,
+                                Colors.blueGrey.shade400, 
+                              ],
+                        // stops có 4 phần tử -> colors bắt buộc phải có 4 phần tử
+                        stops: const [0.2, 0.5, 0.8, 1.0],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_speech.isListening || _isProcessing)
+                              ? Colors.blueAccent.withOpacity(0.5) 
+                              : Colors.transparent,
+                          blurRadius: 20 + (_orbController.value * 20),
+                          spreadRadius: 2,
+                        )
                       ],
-                      stops: [0.2, 0.5, 0.8, 1.0],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blueAccent.withOpacity(0.5),
-                        blurRadius: 20 + (_orbController.value * 10),
-                        spreadRadius: 5,
-                      )
-                    ],
-                  ),
-                );
-              },
+                    child: Center(
+                      child: Icon(
+                        _speech.isListening ? Icons.mic : Icons.mic_none,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
 
-            const SizedBox(height: 80), // Chừa chỗ cho nút Mic ở dưới
+            const SizedBox(height: 50),
           ],
         ),
       ),
@@ -303,11 +309,10 @@ List<Device> _workingDevices = [];
   }
 }
 
-// --- CLASS VẼ SÓNG ÂM (GIỮ NGUYÊN CỦA VỢ) ---
-// --- CLASS VẼ SÓNG ÂM (ĐÃ NÂNG CẤP) ---
+// --- CLASS VẼ SÓNG ÂM ---
 class SiriWavePainter extends CustomPainter {
   final double animationValue;
-  final double waveformHeight; // <--- Biến mới để chỉnh độ cao sóng
+  final double waveformHeight;
 
   SiriWavePainter(this.animationValue, this.waveformHeight);
 
@@ -316,49 +321,31 @@ class SiriWavePainter extends CustomPainter {
     final centerY = size.height / 2;
     final width = size.width;
 
-    void drawWave(Color color, double amplitude, double frequency, double speedOffset) {
-      final paint = Paint()
-        ..color = color.withOpacity(0.6)
-        ..style = PaintingStyle.fill;
+    void drawLineWave(Color color, double amplitude, double frequency, double speed, double strokeWidth) {
+        final paint = Paint()
+          ..color = color.withOpacity(0.8) 
+          ..style = PaintingStyle.stroke 
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round;
+          
+        final path = Path();
+        path.moveTo(0, centerY);
+        
+        if (waveformHeight <= 0.05) {
+           return;
+        }
 
-      final path = Path();
-      path.moveTo(0, centerY);
-
-      // Nếu waveformHeight = 0 thì vẽ đường thẳng luôn cho nhanh
-      if (waveformHeight == 0) {
-         path.lineTo(width, centerY);
-         path.close();
-         canvas.drawPath(path, paint);
-         return;
-      }
-
-      for (double x = 0; x <= width; x++) {
-        final double scaling = sin((x / width) * pi); 
-        final double y = centerY +
-            sin((x * frequency) + (animationValue * 2 * pi) + speedOffset) *
-                (amplitude * waveformHeight) * // <--- Nhân thêm waveformHeight vào đây
-                scaling;
-        path.lineTo(x, y);
-      }
-      
-      for (double x = width; x >= 0; x--) {
-          final double scaling = sin((x / width) * pi);
-          final double y = centerY - 
-            sin((x * frequency) + (animationValue * 2 * pi) + speedOffset) *
-                (amplitude * 0.8 * waveformHeight) * // <--- Và nhân vào đây nữa
-                scaling;
-          path.lineTo(x, y);
-      }
-      
-      path.close();
-      canvas.drawPath(path, paint);
+        for (double x = 0; x <= width; x++) {
+            double scaling = 1 - pow((x / width * 2 - 1).abs(), 2).toDouble();
+            double y = centerY + sin(x * frequency + animationValue * 10 + speed) * amplitude * waveformHeight * scaling;
+            path.lineTo(x, y);
+        }
+        canvas.drawPath(path, paint);
     }
 
-    // Vẽ các lớp sóng
-    drawWave(Colors.blue, 40, 0.012, 0);       
-    drawWave(Colors.purpleAccent, 35, 0.015, 2); 
-    drawWave(Colors.orangeAccent, 30, 0.018, 4); 
-    drawWave(Colors.greenAccent, 25, 0.020, 1);  
+    drawLineWave(Colors.redAccent, 40, 0.015, 1.0, 3.0);       
+    drawLineWave(Colors.blueAccent, 35, 0.018, 2.2, 2.5); 
+    drawLineWave(Colors.purpleAccent, 30, 0.022, 4.5, 2.0); 
   }
 
   @override
