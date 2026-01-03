@@ -12,7 +12,6 @@ import '../../providers/device_provider.dart';
 import '../device/category_devices_screen.dart';
 import 'home_weather_widget.dart';
 import 'home_devices_body.dart';
-// import '../../models/room_model.dart'; // Nếu không dùng thì có thể comment hoặc xóa dòng này
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -81,7 +80,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Gọi API lấy dữ liệu
     try {
-      roomsFromDb = await roomService.fetchRoomNamesByHouse(houseId);
+      // 👇 SỬA ĐOẠN NÀY: Lấy List<Room> rồi map sang List<String>
+      final roomObjects = await roomService.fetchRoomsByHouse(houseId);
+      roomsFromDb = roomObjects.map((r) => r.name).toList();
     } catch (e) { debugPrint("❌ Lỗi lấy phòng: $e"); }
 
     try {
@@ -95,7 +96,6 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       // --- NẠP DỮ LIỆU VÀO KHO TỔNG (PROVIDER) ---
-      // Dòng này cực quan trọng để đồng bộ ID và Trạng thái
       context.read<DeviceProvider>().setDevices(devicesFromDb);
     }
   }
@@ -116,16 +116,13 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setInt('currentHouseId', id);
   }
 
-  // --- SỬA LỖI Ở HÀM NÀY ---
   void _navigateToCategory(String type, String title) {
-    // Không cần lấy allDevices ở đây nữa vì trang Category tự lấy từ Provider rồi
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CategoryDevicesScreen(
           categoryType: type, 
           title: title,
-          // Đã xóa tham số allDevices gây lỗi
         ),
       ),
     );

@@ -1,11 +1,14 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart'; // Import thư viện này để hiển thị text AI đẹp
-import '../../services/chat_ai_service.dart'; // Import Service AI
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:stomp_dart_client/stomp_dart_client.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../config/app_config.dart';
 
 // Model tin nhắn
 class ChatMessage {
   final String text;
-  final bool isUser; // true: Mình, false: Bobo
+  final bool isUser;
   final String time;
 
   ChatMessage({required this.text, required this.isUser, required this.time});
@@ -22,52 +25,121 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   
-  // 1. Gọi Service AI
-  final ChatAiService _chatService = ChatAiService();
-  bool _isLoading = false; // Biến để hiện trạng thái "Đang soạn tin..."
+  // Dữ liệu tin nhắn
+  final List<ChatMessage> _messages = [];
+  
+  // WebSocket Client
+  StompClient? _stompClient;
+  bool _isLoading = false;
+  String? _userId;
 
-  // Dữ liệu mẫu ban đầu
-  final List<ChatMessage> _messages = [
-    ChatMessage(text: "Hi Bobo! 🤖", isUser: true, time: "09:41"),
-    ChatMessage(text: "Hello! 👋 Tui là trợ lý ảo Smartify đây. Tui giúp gì được cho bạn nè?", isUser: false, time: "09:41"),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId();
+    // Tin nhắn chào mặc định
+    _messages.add(ChatMessage(text: "Hi Bobo! 🤖", isUser: true, time: _getCurrentTime()));
+    _messages.add(ChatMessage(text: "Hello! 👋 Tui là trợ lý ảo Smartify đây. Tui giúp gì được cho bạn nè?", isUser: false, time: _getCurrentTime()));
+  }
 
-  // Hàm gửi tin nhắn
-  void _sendMessage() async {
-    String userText = _textController.text.trim();
-    if (userText.isEmpty) return;
-
-    // 1. Hiện tin nhắn của User ngay lập tức
+  // --- LOGIC WEBSOCKET ---
+  void _loadUserId() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      _messages.add(ChatMessage(
-        text: userText,
-        isUser: true,
-        time: _getCurrentTime(),
-      ));
-      _isLoading = true; // Bật chế độ đang gõ
+      _userId = prefs.getInt('userId')?.toString() ?? "guest";
     });
-    
+    _initWebSocket();
+  }
+
+  void _initWebSocket() {
+    if (_userId == null) return;
+
+    _stompClient = StompClient(
+      config: StompConfig(
+        url: AppConfig.webSocketUrl, 
+        onConnect: (frame) {
+          // Lắng nghe câu trả lời từ AI
+          _stompClient!.subscribe(
+            destination: '/topic/chat/$_userId', 
+            callback: (frame) {
+              if (frame.body != null) {
+                final data = jsonDecode(frame.body!);
+                _receiveAiMessage(data['text']);
+              }
+            },
+          );
+        },
+        onStompError: (frame) => print("❌ Lỗi Chat Socket: ${frame.body}"),
+        webSocketConnectHeaders: {"transports": ["websocket"]},
+      ),
+    );
+    _stompClient!.activate();
+  }
+
+  void _sendMessage() {
+    String text = _textController.text.trim();
+    if (text.isEmpty) return;
+
+    // 1. Hiện tin nhắn của mình ngay
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true, time: _getCurrentTime()));
+      _isLoading = true; 
+    });
     _textController.clear();
     _scrollToBottom();
 
-    // 2. Gọi API Gemini (AI trả lời)
-    String aiResponse = await _chatService.sendMessage(userText);
+    // 2. Gửi qua WebSocket
+    if (_stompClient != null && _stompClient!.connected) {
+      _stompClient!.send(
+        destination: '/app/chat.sendMessage',
+        body: jsonEncode({
+          "userId": _userId,
+          "message": text,
+          "action": "CHAT"
+        }),
+      );
+    } else {
+      // Fallback nếu mất mạng
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _messages.add(ChatMessage(text: "⚠️ Mất kết nối máy chủ. Vui lòng thử lại!", isUser: false, time: _getCurrentTime()));
+          });
+          _scrollToBottom();
+        }
+      });
+    }
+  }
 
-    // 3. Cập nhật giao diện khi có câu trả lời
+  void _clearChat() {
+    setState(() {
+      _messages.clear();
+      _messages.add(ChatMessage(text: "Đã xóa ký ức! Bắt đầu lại nào. 🚀", isUser: false, time: _getCurrentTime()));
+    });
+
+    if (_stompClient != null && _stompClient!.connected) {
+      _stompClient!.send(
+        destination: '/app/chat.sendMessage',
+        body: jsonEncode({
+          "userId": _userId,
+          "message": "",
+          "action": "CLEAR"
+        }),
+      );
+    }
+  }
+
+  void _receiveAiMessage(String text) {
     if (mounted) {
       setState(() {
-        _isLoading = false; // Tắt chế độ đang gõ
-        _messages.add(ChatMessage(
-          text: aiResponse,
-          isUser: false,
-          time: _getCurrentTime(),
-        ));
+        _isLoading = false;
+        _messages.add(ChatMessage(text: text, isUser: false, time: _getCurrentTime()));
       });
       _scrollToBottom();
     }
   }
 
-  // Hàm lấy giờ hiện tại (VD: 10:30)
   String _getCurrentTime() {
     final now = DateTime.now();
     return "${now.hour}:${now.minute.toString().padLeft(2, '0')}";
@@ -85,6 +157,15 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _stompClient?.deactivate();
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // --- PHẦN GIAO DIỆN (GIỮ NGUYÊN CỦA VỢ) ---
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -105,8 +186,9 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.black),
-            onPressed: () {},
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            tooltip: "Xóa đoạn chat",
+            onPressed: _clearChat,
           ),
         ],
       ),
@@ -117,9 +199,8 @@ class _ChatScreenState extends State<ChatScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(20),
-              itemCount: _messages.length + (_isLoading ? 1 : 0), // Cộng thêm 1 nếu đang load
+              itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
-                // Nếu đang ở item cuối cùng và đang loading -> Hiện cục "Đang gõ..."
                 if (_isLoading && index == _messages.length) {
                   return Padding(
                     padding: const EdgeInsets.only(left: 10, bottom: 20),
@@ -139,7 +220,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          // KHUNG NHẬP LIỆU (Input Area)
+          // KHUNG NHẬP LIỆU
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -148,7 +229,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: Row(
               children: [
-                // Text Field
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -169,7 +249,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(width: 12),
                 
-                // Send Button
                 GestureDetector(
                   onTap: _sendMessage,
                   child: Container(
@@ -197,14 +276,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(ChatMessage msg, Color primaryColor) {
-    // Nếu là Bobo thì hiện Avatar
     if (!msg.isUser) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 20),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avatar Bobo (Dùng Icon thay thế nếu chưa có ảnh)
             Container(
               margin: const EdgeInsets.only(top: 4),
               width: 40, height: 40,
@@ -213,18 +290,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.grey.shade200),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(4.0),
-                child: Image.asset(
-                  'assets/images/robot_avatar.png', // Vợ nhớ chép ảnh robot vào đây nha
-                  errorBuilder: (context, error, stackTrace) => 
-                      const Icon(Icons.smart_toy, color: Colors.blueAccent),
-                ),
+              child: const Padding(
+                padding: EdgeInsets.all(4.0),
+                child: Icon(Icons.smart_toy, color: Colors.blueAccent),
               ),
             ),
             const SizedBox(width: 12),
             
-            // Bong bóng chat Bobo (Dùng Markdown)
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,7 +312,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         bottomRight: Radius.circular(20),
                       ),
                     ),
-                    // SỬ DỤNG MARKDOWN BODY CHO AI
                     child: MarkdownBody(
                       data: msg.text,
                       styleSheet: MarkdownStyleSheet(
@@ -253,19 +324,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 40), // Khoảng trống bên phải
+            const SizedBox(width: 40), 
           ],
         ),
       );
     } else {
-      // Tin nhắn của User (Màu xanh) - Giữ nguyên Text thường
       return Padding(
         padding: const EdgeInsets.only(bottom: 20),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(width: 40), // Khoảng trống bên trái
+            const SizedBox(width: 40), 
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,

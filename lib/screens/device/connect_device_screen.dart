@@ -7,6 +7,9 @@ import '../../config/app_config.dart';
 import '../../models/device_model.dart'; 
 import 'tabs/nearby_scan_tab.dart'; 
 
+import 'package:provider/provider.dart'; // Để gọi Provider
+import '../../providers/device_provider.dart'; // Để lấy hàm fetchDevices
+
 class ConnectDeviceScreen extends StatefulWidget {
   final DeviceItem device; 
 
@@ -63,38 +66,61 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
     });
   }
 
-  void _completeConnection() {
+void _completeConnection() async {
     if (_isConnected) return;
+    
+    // Ngắt lắng nghe ngay lập tức (nếu vợ đã thêm biến _unsubscribeFn như chồng dặn trước đó)
+    // if (_unsubscribeFn != null) { _unsubscribeFn!(); _unsubscribeFn = null; }
+
     _timer?.cancel();
+
     if (mounted) {
       setState(() {
-        _progress = 1.0; 
-        _isConnected = true; 
+        _progress = 1.0;
+        _isConnected = true;
       });
 
-      // KHỚP VỚI MODEL DEVICE MỚI CỦA VỢ
-      Device successDevice = Device(
-        id: 0, 
-        name: widget.device.name,
-        macAddress: widget.device.macAddress,
-        type: widget.device.type, // Lấy từ DeviceItem
-        isOn: true,
-        roomName: "Smart Home",
-        isWiFi: true, // Kết nối qua App thì mặc định là true
-      );
+      // --- SỬA TỪ ĐÂY ---
+      
+      // 1. Gọi Provider tải lại danh sách thiết bị từ Server về
+      // Mục đích: Để lấy được con thiết bị mới thêm (có ID xịn từ Database)
+      final provider = Provider.of<DeviceProvider>(context, listen: false);
+      await provider.fetchDevices(); 
 
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) {
-          Navigator.pushReplacementNamed( 
-            context, 
-            AppRoutes.connectedSuccess, 
-            arguments: successDevice
-          );
-        }
-      });
+      if (!mounted) return; // Check lại mounted sau khi await
+
+      try {
+        // 2. Tìm lại con thiết bị vừa thêm bằng MAC Address trong danh sách mới tải
+        final realDevice = provider.devices.firstWhere(
+          (d) => d.macAddress.toUpperCase() == widget.device.macAddress.toUpperCase(),
+          orElse: () => Device( // Fallback phòng hờ (ít khi xảy ra)
+            id: 0, 
+            name: widget.device.name, 
+            macAddress: widget.device.macAddress, 
+            type: widget.device.type, 
+            isOn: true, 
+            roomName: "Smart Home"
+          )
+        );
+
+        print("✅ Đã lấy được ID thật: ${realDevice.id}");
+
+        // 3. Chờ xíu cho hiệu ứng 100% hiện lên rồi chuyển trang
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted) {
+            Navigator.pushReplacementNamed( 
+              context, 
+              AppRoutes.connectedSuccess, 
+              arguments: realDevice // <--- Truyền con XỊN này đi
+            );
+          }
+        });
+
+      } catch (e) {
+        print("❌ Lỗi tìm thiết bị: $e");
+      }
     }
   }
-
   @override
   void dispose() {
     _timer?.cancel();

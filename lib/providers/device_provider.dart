@@ -3,46 +3,87 @@ import 'package:flutter/material.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../config/app_config.dart';
 import '../models/device_model.dart';
-import '../services/house_service.dart'; // Hoặc DeviceService tùy vợ đang để hàm toggle ở đâu
+import '../services/house_service.dart';
+import '../services/api_client.dart'; // Thêm ApiClient để gọi API lấy danh sách
 
 class DeviceProvider extends ChangeNotifier {
   // --- KHO DỮ LIỆU ---
   List<Device> _devices = [];
   StompClient? _stompClient;
+  bool _isLoading = false;
 
-  // Getter để UI lấy dữ liệu
+  // Getter
   List<Device> get devices => _devices;
+  bool get isLoading => _isLoading;
 
-  // 1. HÀM NẠP DANH SÁCH (Gọi từ Home Screen)
+  // --- 1. QUAN TRỌNG: HÀM TẢI DANH SÁCH TỪ SERVER ---
+  Future<void> fetchDevices() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Vợ thay đường dẫn API này cho đúng với Backend của vợ
+      // Ví dụ: Lấy tất cả thiết bị của User hoặc của Nhà đang chọn
+      final response = await ApiClient.get('/devices/public/all'); 
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        _devices = data.map((json) => Device.fromJson(json)).toList();
+        
+        // Sau khi có danh sách -> Kết nối Socket ngay để nghe ngóng
+        _initWebSocket();
+      } else {
+        print("❌ Lỗi tải thiết bị: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("❌ Lỗi mạng khi tải thiết bị: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // --- 2. HÀM NẠP DANH SÁCH (Dùng khi Login xong hoặc chuyển nhà) ---
   void setDevices(List<Device> devices) {
     _devices = devices;
-    notifyListeners(); // Vẽ lại giao diện ngay
+    notifyListeners();
     
     // Nếu chưa kết nối Socket thì kết nối ngay
     if (_stompClient == null || !_stompClient!.connected) {
       _initWebSocket();
+    } else {
+      // Nếu đã kết nối rồi thì đăng ký lại cho danh sách mới
+      _subscribeAllDevices();
     }
   }
 
-  // 2. KHỞI TẠO WEBSOCKET (Kết nối 1 lần dùng mãi mãi)
+  // --- 3. KHỞI TẠO WEBSOCKET ---
   void _initWebSocket() {
+    // Nếu đang kết nối rồi thì thôi
+    if (_stompClient != null && _stompClient!.connected) return;
+
     _stompClient = StompClient(
       config: StompConfig(
-        url: AppConfig.webSocketUrl, // ws://IP:8080/ws
+        url: AppConfig.webSocketUrl, 
         onConnect: _onConnect,
         onStompError: (frame) => print("❌ Stomp Error: ${frame.body}"),
-        // Header quan trọng cho Android
         webSocketConnectHeaders: {"transports": ["websocket"]},
+        // Tự động kết nối lại sau 5 giây nếu rớt mạng
+        reconnectDelay: const Duration(seconds: 5), 
       ),
     );
     _stompClient!.activate();
   }
 
-  // 3. ĐĂNG KÝ LẮNG NGHE (Subscribe)
   void _onConnect(StompFrame frame) {
     print("✅ WebSocket Global Connected!");
-    
-    // Duyệt qua tất cả thiết bị để lắng nghe Topic riêng của từng cái
+    _subscribeAllDevices();
+  }
+
+  // Tách hàm Subscribe riêng để tái sử dụng
+  void _subscribeAllDevices() {
+    if (_stompClient == null || !_stompClient!.connected) return;
+
     for (var device in _devices) {
       final macUpper = device.macAddress.toUpperCase();
       
@@ -50,7 +91,6 @@ class DeviceProvider extends ChangeNotifier {
         destination: '/topic/device/$macUpper/data',
         callback: (frame) {
           if (frame.body != null) {
-            // Có tin nhắn -> Cập nhật kho -> Báo UI
             _updateDeviceFromSocket(device.id, frame.body!);
           }
         },
@@ -58,133 +98,102 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
-  // 4. XỬ LÝ DỮ LIỆU SOCKET (Trái tim của Real-time)
+  // --- 4. XỬ LÝ DỮ LIỆU SOCKET ---
   void _updateDeviceFromSocket(int deviceId, String jsonString) {
     try {
       final data = jsonDecode(jsonString);
       
-      // Tìm thiết bị trong kho
       final index = _devices.indexWhere((d) => d.id == deviceId);
       
       if (index != -1) {
         final device = _devices[index];
 
-        // --- A. XỬ LÝ KẾT NỐI (QUAN TRỌNG) ---
+        // A. XỬ LÝ KẾT NỐI
         if (data.containsKey('online')) {
-          device.isOnline = data['online'];
+          bool isOnline = data['online'];
           
-          // Logic tinh tế: Nếu mất mạng -> Tự động Tắt công tắc luôn
-          if (device.isOnline == false) {
-            device.isOn = false;
+          // Chỉ cập nhật và vẽ lại nếu trạng thái THỰC SỰ thay đổi
+          if (device.isOnline != isOnline) {
+             device.isOnline = isOnline;
+             if (!isOnline) device.isOn = false; // Mất mạng -> Tắt
+             notifyListeners();
           }
         }
 
-        // --- B. XỬ LÝ TRẠNG THÁI ---
+        // B. XỬ LÝ TRẠNG THÁI (ON/OFF)
         if (data.containsKey('status')) {
-          device.isOn = data['status'];
+          bool newStatus = data['status'];
+          if (device.isOn != newStatus) {
+            device.isOn = newStatus;
+            notifyListeners();
+          }
         }
 
-        // --- C. XỬ LÝ CHỈ SỐ (Parse an toàn tránh lỗi crash) ---
+        // C. XỬ LÝ CHỈ SỐ
+        bool hasDataChange = false;
         if (data.containsKey('p')) {
-          device.power = double.tryParse(data['p'].toString()) ?? 0.0;
+          double newPower = double.tryParse(data['p'].toString()) ?? 0.0;
+          if (device.power != newPower) {
+            device.power = newPower;
+            hasDataChange = true;
+          }
         }
         if (data.containsKey('i')) {
-          device.current = double.tryParse(data['i'].toString()) ?? 0.0;
+          double newCurrent = double.tryParse(data['i'].toString()) ?? 0.0;
+          if (device.current != newCurrent) {
+            device.current = newCurrent;
+            hasDataChange = true;
+          }
         }
         if (data.containsKey('totalKwh')) {
-          device.totalKwh = double.tryParse(data['totalKwh'].toString()) ?? 0.0;
+          double newKwh = double.tryParse(data['totalKwh'].toString()) ?? 0.0;
+          if (device.totalKwh != newKwh) {
+            device.totalKwh = newKwh;
+            hasDataChange = true;
+          }
         }
 
-        // Hét lên cho cả App biết: "Dữ liệu mới về! Vẽ lại đi!"
-        notifyListeners();
+        if (hasDataChange) notifyListeners();
       }
     } catch (e) {
       print("⚠️ Lỗi update socket: $e");
     }
   }
 
-  // 5. ĐIỀU KHIỂN THIẾT BỊ (Gọi từ UI)
+  // --- 5. ĐIỀU KHIỂN THIẾT BỊ ---
   Future<void> toggleDevice(int deviceId) async {
     final index = _devices.indexWhere((d) => d.id == deviceId);
     if (index == -1) return;
 
     final device = _devices[index];
     
-    // CHẶN BẤM: Nếu đang Offline thì không cho làm gì cả
     if (!device.isOnline) {
       print("🚫 Thiết bị đang Offline, từ chối điều khiển.");
       return; 
     }
 
-    // Optimistic UI: Cập nhật giao diện trước cho mượt (người dùng sướng)
+    // Optimistic UI
     device.isOn = !device.isOn;
     notifyListeners();
 
     try {
-      // Gọi API thực tế
-      // Vợ chú ý: Nếu hàm toggleDevice nằm ở DeviceService thì đổi HouseService thành DeviceService nhé
+      // Gọi API Backend
       bool success = await HouseService().toggleDevice(
         device.id.toString(), 
         device.isOn
       );
       
-      // Nếu API thất bại -> Hoàn tác lại trạng thái cũ (Rollback)
       if (!success) {
-        device.isOn = !device.isOn;
+        device.isOn = !device.isOn; // Rollback
         notifyListeners();
       }
     } catch (e) {
-      // Lỗi mạng -> Cũng hoàn tác lại
       print("❌ Lỗi toggle: $e");
-      device.isOn = !device.isOn;
+      device.isOn = !device.isOn; // Rollback
       notifyListeners();
     }
   }
 
-  // --- HÀM BỔ SUNG (CHO UI GỌI THỦ CÔNG) ---
-  
-  // Map để quản lý các gói đăng ký (để sau này còn hủy được)
-  final Map<int, dynamic> _subscriptions = {};
-
-  void subscribeToDevice(int deviceId) {
-    // 1. Tìm thiết bị
-    final index = _devices.indexWhere((d) => d.id == deviceId);
-    if (index == -1) return;
-    
-    final device = _devices[index];
-    final macUpper = device.macAddress.toUpperCase();
-
-    // 2. Kiểm tra kết nối
-    if (_stompClient == null || !_stompClient!.connected) {
-        print("⚠️ Socket chưa sẵn sàng, đang kết nối lại...");
-        _initWebSocket();
-        return;
-    }
-
-    print("🎧 [PROVIDER] Đang đăng ký lắng nghe: $macUpper");
-
-    // 3. Đăng ký topic
-    // Lưu cái token hủy vào Map để dùng sau này
-    _subscriptions[deviceId] = _stompClient!.subscribe(
-      destination: '/topic/device/$macUpper/data',
-      callback: (frame) {
-        if (frame.body != null) {
-          _updateDeviceFromSocket(deviceId, frame.body!);
-        }
-      },
-    );
-  }
-
-  // Hàm hủy đăng ký (Dùng khi thoát màn hình để đỡ tốn RAM)
-  void unsubscribeFromDevice(int deviceId) {
-    if (_subscriptions.containsKey(deviceId)) {
-      _subscriptions[deviceId]?.call(); // Gọi hàm hủy
-      _subscriptions.remove(deviceId);
-      print("🔕 [PROVIDER] Đã hủy lắng nghe thiết bị $deviceId");
-    }
-  }
-
-  // Ngắt kết nối khi thoát App hẳn (ít khi dùng nhưng nên có)
   @override
   void dispose() {
     _stompClient?.deactivate();

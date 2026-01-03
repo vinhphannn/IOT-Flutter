@@ -1,17 +1,15 @@
 class Room {
   final int id;
   final String name;
+  final String? imageUrl;
 
-  Room({required this.id, required this.name});
+  Room({required this.id, required this.name, this.imageUrl});
 
   factory Room.fromJson(Map<String, dynamic> json) {
     return Room(
       id: json['id'],
-      name: json['name'] ?? "Phòng không tên",
+      name: json['name'],
+      imageUrl: json['imageUrl'],
     );
   }
-  
-  // Hàm hỗ trợ hiển thị trong Dropdown
-  @override
-  String toString() => name;
 }

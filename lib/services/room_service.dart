@@ -1,33 +1,44 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../services/api_client.dart'; // Import đúng file ApiClient xịn xò
+import '../services/api_client.dart'; 
+import '../models/room_model.dart'; // <--- Nhớ import Model Room
 
 class RoomService {
-  // Đường dẫn chuẩn theo file Java vợ gửi: /rooms/house/{houseId}
-  Future<List<String>> fetchRoomNamesByHouse(int houseId) async {
-    // 1. Dùng đường dẫn này mới đúng với Backend nhé!
+  
+  // 1. LẤY DANH SÁCH PHÒNG (Trả về List<Room> thay vì List<String>)
+  Future<List<Room>> fetchRoomsByHouse(int houseId) async {
     final String endpoint = '/rooms/house/$houseId'; 
-    
     debugPrint("🚀 [RoomService] Gọi API: $endpoint");
 
     try {
-      // ApiClient đã tự động gắn Token để qua mặt Spring Security
       final response = await ApiClient.get(endpoint);
 
       if (response.statusCode == 200) {
-        // Parse UTF-8 để không lỗi font tiếng Việt
+        // Parse JSON thành List các đối tượng Room
         List<dynamic> body = jsonDecode(utf8.decode(response.bodyBytes));
-        
-        // 2. QUAN TRỌNG: Kiểm tra xem trong Java, class Room đặt tên biến là 'name' hay 'roomName'?
-        // Ở đây chồng giả sử là 'name'. Nếu lỗi, vợ thử đổi thành item['roomName'] nhé.
-        return body.map((item) => item['name'].toString()).toList();
+        return body.map((item) => Room.fromJson(item)).toList();
       } else {
-        debugPrint("❌ [RoomService] Lỗi từ Backend: ${response.statusCode} - ${response.body}");
+        debugPrint("❌ [RoomService] Lỗi: ${response.body}");
         return [];
       }
     } catch (e) {
       debugPrint("❌ [RoomService] Lỗi kết nối: $e");
       return [];
     }
+  }
+
+  // 2. THÊM PHÒNG
+  Future<bool> addRoom(int houseId, String name) async {
+    final response = await ApiClient.post(
+      '/rooms/house/$houseId', 
+      {'name': name},
+    );
+    return response.statusCode == 200 || response.statusCode == 201;
+  }
+
+  // 3. XÓA PHÒNG (Dùng ID lấy từ object Room ở trên)
+  Future<bool> deleteRoom(int roomId) async {
+    final response = await ApiClient.delete('/rooms/$roomId');
+    return response.statusCode == 200;
   }
 }

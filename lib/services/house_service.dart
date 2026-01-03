@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import '../models/house_model.dart';
 import '../models/device_model.dart';
+import '../models/house_member_model.dart';
 
 class HouseService {
   // ... (Hàm fetchMyHouses giữ nguyên) ...
@@ -17,6 +18,31 @@ class HouseService {
     } catch (e) {
       return [];
     }
+  }
+
+  // --- HÀM MỚI: Lấy danh sách thành viên ---
+  Future<List<HouseMember>> fetchHouseMembers(int houseId) async {
+    final response = await ApiClient.get('/houses/$houseId/members');
+    if (response.statusCode == 200) {
+      List<dynamic> data = jsonDecode(response.body);
+      return data.map((json) => HouseMember.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to load members');
+    }
+  }
+
+  // --- HÀM MỚI: Xóa nhà (Dành cho Admin) ---
+  Future<bool> deleteHouse(int houseId) async {
+    final response = await ApiClient.delete('/houses/$houseId');
+    return response.statusCode == 200;
+  }
+
+  Future<bool> updateHouseName(int houseId, String newName) async {
+    final response = await ApiClient.put(
+      '/houses/$houseId', 
+      {'name': newName}, // Body JSON
+    );
+    return response.statusCode == 200;
   }
 
   // Hàm lấy thiết bị (Đổi tên cho đúng ý backend)

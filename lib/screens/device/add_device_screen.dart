@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'tabs/nearby_scan_tab.dart'; // <--- 1. Import đúng file Radar chồng gửi lúc nãy
+import 'tabs/nearby_scan_tab.dart'; 
 import 'tabs/manual_add_tab.dart'; 
 import '../../routes.dart';
 
@@ -31,6 +31,19 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
           "Add Device",
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
         ),
+        actions: [
+          // --- SỬA Ở ĐÂY: Thêm Padding để đẩy nút vào trong ---
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0), // Cách lề phải 16px
+            child: IconButton(
+              icon: const Icon(Icons.qr_code_scanner, color: Colors.black),
+              onPressed: () {
+                Navigator.pushNamed(context, AppRoutes.scanQR);
+              },
+            ),
+          ),
+          // ----------------------------------------------------
+        ],
       ),
       body: Column(
         children: [
@@ -55,8 +68,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
           // 2. NỘI DUNG CHÍNH
           Expanded(
             child: _selectedTab == 0
-                // Tab 0: Gọi đúng tên class ScanNearbyScreen (file Radar độc lập)
-                ? const ScanNearbyScreen() 
+                ? const NearbyScanTab() 
                 : const ManualAddTab(), 
           ),
         ],

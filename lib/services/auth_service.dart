@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_client.dart'; // <--- Dùng ApiClient mới
+import 'api_client.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn();
@@ -17,11 +17,12 @@ class AuthService {
 
       if (idToken == null) return false;
 
-      // GỌI QUA API CLIENT (Tự xử lý Url, Header, 401)
-      final response = await ApiClient.post('/auth/social-login', {
-        "provider": "GOOGLE",
-        "token": idToken
-      });
+      // SỬA: withToken: false (Không gửi token rác lên)
+      final response = await ApiClient.post(
+        '/auth/social-login', 
+        { "provider": "GOOGLE", "token": idToken },
+        withToken: false 
+      );
 
       if (response.statusCode == 200) {
         await _saveUserData(response.body);
@@ -37,10 +38,12 @@ class AuthService {
   // --- LOGIN THƯỜNG ---
   Future<Map<String, dynamic>?> login(String email, String password) async {
     try {
-      final response = await ApiClient.post('/auth/login', {
-        "email": email,
-        "password": password
-      });
+      // SỬA: withToken: false
+      final response = await ApiClient.post(
+        '/auth/login', 
+        { "email": email, "password": password },
+        withToken: false 
+      );
 
       if (response.statusCode == 200) {
         await _saveUserData(response.body);
@@ -55,10 +58,12 @@ class AuthService {
   // --- REGISTER ---
   Future<bool> register(String email, String password) async {
     try {
-      final response = await ApiClient.post('/auth/signup', {
-        "email": email,
-        "password": password
-      });
+      // SỬA: withToken: false
+      final response = await ApiClient.post(
+        '/auth/signup', 
+        { "email": email, "password": password },
+        withToken: false 
+      );
       return response.statusCode == 200;
     } catch (e) {
       return false;
@@ -73,6 +78,7 @@ class AuthService {
     required List<String> roomNames,
   }) async {
     try {
+      // Setup thì cần Token để biết setup cho ai -> withToken: true (mặc định)
       final response = await ApiClient.post('/user/setup', {
         "nationality": nationality,
         "houseName": houseName,
