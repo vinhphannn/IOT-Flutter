@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../models/house_model.dart';
 import '../../services/house_service.dart';
 import 'home_detail_screen.dart';
+import 'join_home_scan_screen.dart';
+import 'create_home_screen.dart';
 
 class HomeManagementScreen extends StatefulWidget {
   const HomeManagementScreen({super.key});
@@ -131,8 +133,18 @@ class _HomeManagementScreenState extends State<HomeManagementScreen> {
                   width: double.infinity,
                   height: 55,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // Navigator.pushNamed(context, '/create-home'); // TODO: Tạo trang Create Home
+                    onPressed: () async {
+                      // 👇 MỞ TRANG TẠO NHÀ
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CreateHomeScreen(),
+                        ),
+                      );
+                      // Nếu tạo thành công (result == true), load lại danh sách nhà
+                      if (result == true) {
+                        _fetchHouses();
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
@@ -158,8 +170,15 @@ class _HomeManagementScreenState extends State<HomeManagementScreen> {
                   width: double.infinity,
                   height: 55,
                   child: OutlinedButton(
-                    onPressed: () {
-                      // Navigator.pushNamed(context, '/join-home'); // TODO: Tạo trang Join Home
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const JoinHomeScanScreen(),
+                        ),
+                      );
+                      if (result == true)
+                        _fetchHouses(); // Reload danh sách nhà sau khi join thành công
                     },
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: primaryColor, width: 2),

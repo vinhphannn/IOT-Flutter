@@ -26,6 +26,8 @@ dependencies:
   google_generative_ai: ^0.4.6  # Thư viện Gemini chính chủ
   flutter_markdown: ^0.7.3
   speech_to_text: ^7.2.0  # Thư viện chuyển giọng nói thành chữ
+  qr_flutter: ^4.1.0
+  share_plus: ^10.1.0
 
 
   # Google

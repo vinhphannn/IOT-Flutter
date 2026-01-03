@@ -1,7 +1,7 @@
 // --- 1. PHẦN MỚI THÊM: ĐỊNH NGHĨA KOTLIN VERSION ---
 buildscript {
     // Định nghĩa biến kotlin_version là 1.9.0 (Bản ổn định cho thư viện mới)
-    val kotlin_version by extra("1.9.0") 
+    val kotlin_version by extra("2.1.0") 
     
     repositories {
         google()
