@@ -40,6 +40,11 @@
     <string>This app needs access to location to show local weather.</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Smartify cần truy cập vị trí để hiển thị thời tiết tại khu vực của bạn.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Ứng dụng cần truy cập micro để nghe lệnh giọng nói điều khiển thiết bị.</string>
+
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Ứng dụng cần quyền này để xử lý giọng nói của bạn.</string>
     
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>

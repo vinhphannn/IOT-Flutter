@@ -103,8 +103,16 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => const NotificationScreen());
       case chat:
         return MaterialPageRoute(builder: (_) => const ChatScreen());
-      case voiceAssistant:
-        return MaterialPageRoute(builder: (_) => const VoiceAssistantScreen());
+     case voiceAssistant:
+        // Lấy danh sách thiết bị (nếu được truyền vào)
+        List<Device> devices = [];
+        if (args is List<Device>) {
+          devices = args;
+        }
+        // Truyền vào màn hình (nếu không có thì truyền list rỗng để không crash)
+        return MaterialPageRoute(
+            builder: (_) => VoiceAssistantScreen(devices: devices)
+        );
       case smart:
         return MaterialPageRoute(builder: (_) => const SmartScreen());
 
