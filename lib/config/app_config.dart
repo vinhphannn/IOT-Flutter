@@ -3,8 +3,7 @@ import 'package:http/http.dart' as http; // Nhớ import cái này để check k
 
 class AppConfig {
   // 1. CÁC URL MẶC ĐỊNH
-  // Link Server Koyeb (Chạy online ổn định nhất)
-  static const String _koyebUrl = "https://operational-kellia-vinhphan-0c3fa64b.koyeb.app/api";
+static const String _koyebUrl = "https://iot-java-spring-boot-production.up.railway.app/api";
   
   // Link Máy ảo Android (Dự phòng khi chạy local)
   static const String _emulatorUrl = "http://10.0.2.2:8080/api";
@@ -12,7 +11,7 @@ class AppConfig {
   // Biến lưu URL hiện tại đang dùng (Mặc định dùng Koyeb cho xịn)
   static String baseUrl = _koyebUrl; 
 
-  static const String _keyBaseUrl = 'saved_base_url';
+  static const String _keyBaseUrl = 'saved_base_url1';
 
   // --- LOGIC WEBSOCKET TỰ ĐỘNG ---
   static String get webSocketUrl {
