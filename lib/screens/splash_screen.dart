@@ -20,31 +20,29 @@ class _SplashScreenState extends State<SplashScreen> {
     _startAppFlow();
   }
 
-  void _startAppFlow() async {
-    // --- THAY ĐỔI QUAN TRỌNG Ở ĐÂY ---
-    // Gọi hàm loadConfig thông minh để nó tự chọn URL (Koyeb hoặc Local cũ)
+void _startAppFlow() async {
     await AppConfig.loadConfig(); 
-    
-    // Sau khi AppConfig chọn xong URL, kiểm tra lại xem có mạng không
     bool isConnected = await ApiClient.checkConnection();
 
     if (!isConnected) {
       if (mounted) {
-        // Nếu mất mạng hoặc URL chết -> Hiện bảng nhập IP
         showDialog(
           context: context,
           barrierDismissible: false,
           builder: (context) => ServerConfigDialog(
-            // Khi lưu IP mới xong thì chạy lại quy trình từ đầu
+            // 👇 SỬA ĐOẠN NÀY VỢ NHÉ
             onSaved: () {
-              Navigator.pop(context); // Tắt dialog
-              _startAppFlow(); // Thử lại
+              Navigator.pop(context); // 1. Tắt bảng nhập IP
+              
+              // 2. QUAN TRỌNG: Đừng gọi lại _startAppFlow()
+              // Vì URL đã được lưu trong bộ nhớ rồi, đi thẳng vào check login luôn
+              // để tránh việc loadConfig() chạy lại và vô tình reset về link Koyeb.
+              _checkLoginStatus(); 
             } 
           ),
         );
       }
     } else {
-      // Mạng ngon -> Kiểm tra đăng nhập
       _checkLoginStatus();
     }
   }
