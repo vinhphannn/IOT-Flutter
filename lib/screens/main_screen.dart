@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'home/home_screen.dart';
 import 'profile/account_screen.dart';
 import 'smart/smart_screen.dart';
+import 'report/reports_screen.dart';
 // Import routes để điều hướng
 import '../routes.dart';
 
@@ -20,7 +21,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _pages = [
     const HomeScreen(), // Trang 0: Home
     const SmartScreen(),// Trang 1
-    const Center(child: Text("Reports Page (Coming Soon)")), // Trang 2
+    const ReportsScreen(),
     const AccountScreen(), // Trang 3: Account
   ];
 

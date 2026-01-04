@@ -1,46 +1,40 @@
 import 'package:flutter/material.dart';
-import '../widgets/smart_task_card.dart'; // Đảm bảo đường dẫn import đúng
+import 'package:provider/provider.dart';
+import '/../models/scene_model.dart';
+import '/../providers/smart_provider.dart';
+import '../widgets/smart_task_card.dart';
 
 class AutomationTab extends StatelessWidget {
-  final int houseId; // Nhận houseId
+  final List<Scene> scenes;
 
-  const AutomationTab({super.key, required this.houseId});
+  const AutomationTab({super.key, required this.scenes});
 
   @override
   Widget build(BuildContext context) {
-    // Dữ liệu giả (sau này sẽ lấy từ API dựa trên houseId)
-    return ListView(
+    if (scenes.isEmpty) {
+      return const Center(child: Text("No automations yet", style: TextStyle(color: Colors.grey)));
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      children: [
-        SmartTaskCard(
-          title: "Turn ON All the Lights",
-          subtitle: "1 task",
-          icons: const [Icons.access_time_filled, Icons.wb_sunny],
-          initialValue: true,
-          iconColor: Colors.orange,
-          onTap: () {},
-          onToggle: (val) {},
-        ),
-        SmartTaskCard(
-          title: "Go to Office",
-          subtitle: "2 tasks",
-          icons: const [Icons.location_on, Icons.access_time_filled, Icons.local_offer],
-          initialValue: true,
-          iconColor: Colors.green,
-          onTap: () {},
-          onToggle: (val) {},
-        ),
-        SmartTaskCard(
-          title: "Energy Saver Mode",
-          subtitle: "2 tasks",
-          icons: const [Icons.work, Icons.security, Icons.notifications],
-          initialValue: false,
-          iconColor: Colors.blue,
-          onTap: () {},
-          onToggle: (val) {},
-        ),
-        const SizedBox(height: 80),
-      ],
+      itemCount: scenes.length,
+      itemBuilder: (context, index) {
+        final scene = scenes[index];
+        return SmartTaskCard(
+          title: scene.name,
+          subtitle: "${scene.actionCount} tasks",
+          icons: [scene.iconData], // Hiện 1 icon đại diện
+          initialValue: scene.enabled, // Trạng thái từ API
+          iconColor: scene.color,      // Màu từ API
+          onTap: () {
+            // Sau này làm trang Edit Scene thì mở ở đây
+          },
+          onToggle: (val) {
+            // Gọi Provider để Bật/Tắt
+            context.read<SmartProvider>().toggleAutomation(scene.id, scene.enabled);
+          },
+        );
+      },
     );
   }
 }

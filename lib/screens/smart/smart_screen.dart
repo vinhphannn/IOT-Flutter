@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/house_provider.dart';
-import '../../widgets/house_selector_dropdown.dart'; // Import widget dùng chung
+import '../../providers/smart_provider.dart'; // Import Provider mới
+import '../../widgets/house_selector_dropdown.dart';
 import 'tabs/automation_tab.dart';
 import 'tabs/tap_to_run_tab.dart';
+import 'create_scene_screen.dart';
+import 'manage_scenes_screen.dart';
 
 class SmartScreen extends StatefulWidget {
   const SmartScreen({super.key});
@@ -12,15 +15,16 @@ class SmartScreen extends StatefulWidget {
   State<SmartScreen> createState() => _SmartScreenState();
 }
 
-class _SmartScreenState extends State<SmartScreen> with SingleTickerProviderStateMixin {
+class _SmartScreenState extends State<SmartScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    
-    // Đảm bảo danh sách nhà được tải nếu chưa có
+
+    // Load danh sách nhà nếu chưa có
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final houseProvider = context.read<HouseProvider>();
       if (houseProvider.houses.isEmpty) {
@@ -39,6 +43,21 @@ class _SmartScreenState extends State<SmartScreen> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
 
+    // Lắng nghe HouseID hiện tại
+    final houseId = context.select<HouseProvider, int?>(
+      (p) => p.currentHouse?.id,
+    );
+
+    // Logic Fetch Scene khi HouseID thay đổi
+    if (houseId != null) {
+      // Dùng Future.microtask để tránh lỗi gọi setState trong lúc build
+      Future.microtask(() {
+        // Chỉ fetch nếu danh sách đang rỗng hoặc cần thiết (tuỳ logic cache của vợ)
+        // Ở đây chồng gọi luôn để đảm bảo data mới nhất khi đổi nhà
+        context.read<SmartProvider>().fetchScenes(houseId);
+      });
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),
       body: SafeArea(
@@ -50,53 +69,61 @@ class _SmartScreenState extends State<SmartScreen> with SingleTickerProviderStat
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 👇 SỬ DỤNG WIDGET DÙNG CHUNG CHO DROPDOWN NHÀ
                   const Expanded(child: HouseSelectorDropdown()),
-                  
-                  // Icon bên phải
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.description_outlined, color: Colors.black87),
+                        icon: const Icon(
+                          Icons.description_outlined,
+                          color: Colors.black87,
+                        ),
                         onPressed: () {},
                       ),
                       IconButton(
-                        icon: const Icon(Icons.grid_view, color: Colors.black87),
-                        onPressed: () {},
+                        icon: const Icon(
+                          Icons.grid_view,
+                          color: Colors.black87,
+                        ),
+                        // 👇 SỬA LẠI CHỖ NÀY
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ManageScenesScreen(),
+                            ),
+                          );
+                        },
                       ),
                     ],
-                  )
+                  ),
                 ],
               ),
             ),
 
-            // 2. TAB BAR
-     // 2. CUSTOM TAB BAR (ĐÃ SỬA LẠI ĐẸP HƠN)
+            // 2. CUSTOM TAB BAR
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               height: 50,
               decoration: BoxDecoration(
-                color: Colors.white, // Màu nền trắng cho cả thanh Tab
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(4.0), // Padding nhỏ để indicator không chạm viền
+                padding: const EdgeInsets.all(4.0),
                 child: TabBar(
                   controller: _tabController,
-                  
-                  // --- CẤU HÌNH INDICATOR ĐỂ BỌC HẾT ---
                   indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10), // Bo góc cho phần xanh
-                    color: primaryColor, // Màu xanh chủ đạo
+                    borderRadius: BorderRadius.circular(10),
+                    color: primaryColor,
                   ),
-                  indicatorSize: TabBarIndicatorSize.tab, // Quan trọng: Bắt buộc indicator giãn full tab
-                  dividerColor: Colors.transparent, // Xóa gạch chân mặc định
-                  
-                  // --- MÀU CHỮ ---
-                  labelColor: Colors.white, // Chữ khi được chọn
-                  unselectedLabelColor: Colors.grey[600], // Chữ khi chưa chọn
-                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: Colors.transparent,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey[600],
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                   tabs: const [
                     Tab(text: "Automation"),
                     Tab(text: "Tap-to-Run"),
@@ -106,30 +133,30 @@ class _SmartScreenState extends State<SmartScreen> with SingleTickerProviderStat
             ),
             const SizedBox(height: 10),
 
-            // 3. CONTENT (LẮNG NGHE HOUSE PROVIDER)
+            // 3. CONTENT
             Expanded(
-              child: Consumer<HouseProvider>(
-                builder: (context, houseProvider, child) {
-                  final currentHouseId = houseProvider.currentHouse?.id;
+              child: houseId == null
+                  ? const Center(child: Text("Please create or join a home"))
+                  : Consumer<SmartProvider>(
+                      builder: (context, smartProvider, child) {
+                        if (smartProvider.isLoading) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
 
-                  if (houseProvider.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  
-                  if (currentHouseId == null) {
-                    return const Center(child: Text("Please create or join a home"));
-                  }
-
-                  return TabBarView(
-                    controller: _tabController,
-                    children: [
-                      // Truyền houseId vào để Tab tự load API Automation của nhà đó
-                      AutomationTab(houseId: currentHouseId), 
-                      TapToRunTab(houseId: currentHouseId),
-                    ],
-                  );
-                },
-              ),
+                        return TabBarView(
+                          controller: _tabController,
+                          children: [
+                            // Truyền danh sách Scene đã lọc vào các Tab
+                            AutomationTab(
+                              scenes: smartProvider.automationScenes,
+                            ),
+                            TapToRunTab(scenes: smartProvider.tapToRunScenes),
+                          ],
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -138,12 +165,10 @@ class _SmartScreenState extends State<SmartScreen> with SingleTickerProviderStat
       // 4. FLOATING ACTION BUTTON (+)
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Mở trang thêm automation/tap-to-run tương ứng với tab đang chọn
-          if (_tabController.index == 0) {
-             // Navigator.pushNamed(context, '/add-automation');
-          } else {
-             // Navigator.pushNamed(context, '/add-tap-to-run');
-          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateSceneScreen()),
+          );
         },
         backgroundColor: primaryColor,
         child: const Icon(Icons.add, color: Colors.white, size: 30),
