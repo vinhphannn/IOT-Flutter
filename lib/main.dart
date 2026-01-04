@@ -6,6 +6,7 @@ import 'config/app_config.dart';
 // ... import provider ...
 import 'package:provider/provider.dart';
 import 'providers/device_provider.dart';
+import 'providers/house_provider.dart'; // <--- Import mới
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,7 @@ void main() async {
       providers: [
         // Khởi tạo DeviceProvider ngay từ lúc App mới mở mắt
         ChangeNotifierProvider(create: (_) => DeviceProvider()),
+        ChangeNotifierProvider(create: (_) => HouseProvider()),
         
         // Sau này nếu có thêm UserProvider hay NotificationProvider thì cứ thêm tiếp vào đây
       ],

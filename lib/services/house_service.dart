@@ -182,4 +182,27 @@ class HouseService {
       return false;
     }
   }
+
+  // --- HÀM MỚI: Cập nhật vai trò thành viên ---
+  // API: PUT /api/houses/{houseId}/members/{userId}/role
+  Future<bool> updateMemberRole(int houseId, int userId, String newRole) async {
+    try {
+      final response = await ApiClient.put(
+        '/houses/$houseId/members/$userId/role',
+        {"role": newRole.toUpperCase()} // Gửi lên là "ADMIN" hoặc "MEMBER"
+      );
+      
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        debugPrint("Lỗi update role: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      debugPrint("Lỗi kết nối: $e");
+      return false;
+    }
+  }
+
+  
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 // Import 4 trang con
 import 'home/home_screen.dart';
 import 'profile/account_screen.dart';
+import 'smart/smart_screen.dart';
 // Import routes để điều hướng
 import '../routes.dart';
 
@@ -18,7 +19,7 @@ class _MainScreenState extends State<MainScreen> {
   // Danh sách 4 màn hình
   final List<Widget> _pages = [
     const HomeScreen(), // Trang 0: Home
-    const Center(child: Text("Smart Page (Coming Soon)")), // Trang 1
+    const SmartScreen(),// Trang 1
     const Center(child: Text("Reports Page (Coming Soon)")), // Trang 2
     const AccountScreen(), // Trang 3: Account
   ];

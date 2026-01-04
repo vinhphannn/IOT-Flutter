@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../routes.dart';
 import '../../services/room_service.dart';
 import '../../services/house_service.dart';
 import '../../models/device_model.dart';
-import '../../models/house_model.dart';
 import '../../providers/device_provider.dart';
+import '../../providers/house_provider.dart'; // <--- Import Provider
+import '../../widgets/house_selector_dropdown.dart'; // <--- Import Widget dùng chung
 
 import '../device/category_devices_screen.dart';
 import 'home_weather_widget.dart';
@@ -21,56 +20,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // --- BIẾN QUẢN LÝ NHÀ & DỮ LIỆU ---
-  List<House> _houses = [];
-  House? _currentHouse;
-  bool _isLoadingHouse = true;
-
   int _selectedRoomIndex = 0;
   List<String> _rooms = ["All Rooms"];
   
   @override
   void initState() {
     super.initState();
-    _initHomeData();
+    // Gọi Provider để lấy danh sách nhà ngay khi vào Home
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HouseProvider>().fetchHouses();
+    });
   }
 
-  // --- LOGIC DỮ LIỆU (NHÀ, PHÒNG, THIẾT BỊ) ---
-  Future<void> _initHomeData() async {
-    await _fetchHouses();
-  }
-
-  Future<void> _fetchHouses() async {
-    try {
-      HouseService houseService = HouseService();
-      List<House> houses = await houseService.fetchMyHouses();
-
-      if (mounted) {
-        setState(() {
-          _houses = houses;
-          if (_houses.isNotEmpty) {
-            _currentHouse = _houses[0];
-            _saveCurrentHouseId(_currentHouse!.id);
-            _isLoadingHouse = false;
-          } else {
-            _isLoadingHouse = false;
-          }
-        });
-
-        if (_currentHouse != null) {
-          await _fetchRoomsAndDevices(_currentHouse!.id);
-        }
-      }
-    } catch (e) {
-      debugPrint("Lỗi lấy danh sách nhà: $e");
-      if (mounted) setState(() => _isLoadingHouse = false);
-      
-      if (e.toString().contains("401") || e.toString().contains("UNAUTHORIZED")) {
-         if (mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.loginOptions, (route) => false);
-      }
-    }
-  }
-
+  // --- LẮNG NGHE SỰ THAY ĐỔI CỦA NHÀ ---
+  // Mỗi khi HouseProvider đổi nhà, hàm này sẽ được gọi (thông qua Consumer hoặc didChangeDependencies)
+  // Tuy nhiên, cách tốt nhất là dùng một hàm riêng để fetch data dựa trên houseId mới
   Future<void> _fetchRoomsAndDevices(int houseId) async {
     final houseService = HouseService();
     final roomService = RoomService();
@@ -78,9 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
     List<String> roomsFromDb = [];
     List<Device> devicesFromDb = [];
 
-    // Gọi API lấy dữ liệu
     try {
-      // 👇 SỬA ĐOẠN NÀY: Lấy List<Room> rồi map sang List<String>
       final roomObjects = await roomService.fetchRoomsByHouse(houseId);
       roomsFromDb = roomObjects.map((r) => r.name).toList();
     } catch (e) { debugPrint("❌ Lỗi lấy phòng: $e"); }
@@ -92,43 +54,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _rooms = ["All Rooms", ...roomsFromDb];
-        _selectedRoomIndex = 0;
+        _selectedRoomIndex = 0; // Reset về All Rooms khi đổi nhà
       });
-
-      // --- NẠP DỮ LIỆU VÀO KHO TỔNG (PROVIDER) ---
       context.read<DeviceProvider>().setDevices(devicesFromDb);
     }
   }
 
-  void _onHouseSelected(House house) async {
-    if (_currentHouse?.id == house.id) return;
-    setState(() {
-      _currentHouse = house;
-      _isLoadingHouse = true;
-    });
-    await _saveCurrentHouseId(house.id);
-    await _fetchRoomsAndDevices(house.id);
-    if (mounted) setState(() => _isLoadingHouse = false);
-  }
-
-  Future<void> _saveCurrentHouseId(int id) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('currentHouseId', id);
-  }
-
   void _navigateToCategory(String type, String title) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CategoryDevicesScreen(
-          categoryType: type, 
-          title: title,
-        ),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => CategoryDevicesScreen(categoryType: type, title: title)));
   }
 
-  // --- GIAO DIỆN CHÍNH ---
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -136,59 +71,78 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            if (_currentHouse != null) {
-              await _fetchRoomsAndDevices(_currentHouse!.id);
-            } else {
-              await _fetchHouses();
-            }
-          },
-          color: primaryColor,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Header
-                _buildHeader(context),
-                const SizedBox(height: 24),
-                
-                // 2. Weather
-                const HomeWeatherWidget(),
-                const SizedBox(height: 24),
+        child: Consumer<HouseProvider>(
+          builder: (context, houseProvider, child) {
+            // --- LOGIC TỰ ĐỘNG TẢI LẠI DỮ LIỆU ---
+            // Nếu nhà thay đổi và khác với nhà hiện tại đang hiển thị, hãy tải lại phòng/thiết bị
+            // Lưu ý: Để tránh loop vô hạn, ta chỉ gọi hàm fetch nếu cần thiết. 
+            // Tuy nhiên, trong Consumer build, ta không nên gọi async trực tiếp.
+            // Cách đơn giản nhất: Dùng FutureBuilder hoặc gọi fetch ở đây nhưng cần cẩn thận.
+            // Ở đây chồng dùng một trick nhỏ: Lấy ID nhà hiện tại, truyền vào FutureBuilder bên dưới hoặc 
+            // đơn giản là cứ mỗi lần build lại (do notifyListeners), ta hiển thị dữ liệu mới.
+            
+            // Nhưng thiết bị và phòng đang nằm ở biến local (_rooms) và DeviceProvider.
+            // Nên ta cần một cơ chế Trigger.
+            // Giải pháp: Dùng `didUpdateWidget` hoặc so sánh ID cũ/mới.
+            // Để đơn giản cho vợ, chồng sẽ gọi _fetchRoomsAndDevices ngay khi ID nhà thay đổi.
+            
+            // Tạm thời chồng sẽ gọi hàm fetch mỗi khi HouseProvider báo thay đổi (nhưng cần debounce để tránh spam).
+            // Tốt nhất là dùng `Selector` hoặc check ID.
+            
+            // -> Chồng sẽ dùng `_CheckHouseChange` widget con để xử lý việc này cho gọn.
+            return _CheckHouseChange(
+              houseId: houseProvider.currentHouse?.id,
+              onHouseChanged: (id) => _fetchRoomsAndDevices(id),
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  await houseProvider.fetchHouses();
+                  if (houseProvider.currentHouse != null) {
+                    await _fetchRoomsAndDevices(houseProvider.currentHouse!.id);
+                  }
+                },
+                color: primaryColor,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. Header (Dùng Widget dùng chung)
+                      _buildHeader(context), 
+                      const SizedBox(height: 24),
+                      
+                      // 2. Weather
+                      const HomeWeatherWidget(),
+                      const SizedBox(height: 24),
 
-                // 3. Devices Body (Dùng Consumer)
-                Consumer<DeviceProvider>(
-                  builder: (context, deviceProvider, child) {
-                    final allDevices = deviceProvider.devices;
-                    
-                    List<Device> displayDevices;
-                    if (_selectedRoomIndex == 0) {
-                      displayDevices = allDevices;
-                    } else {
-                      String roomName = _rooms[_selectedRoomIndex];
-                      displayDevices = allDevices.where((d) => d.roomName == roomName).toList();
-                    }
+                      // 3. Devices Body
+                      Consumer<DeviceProvider>(
+                        builder: (context, deviceProvider, child) {
+                          final allDevices = deviceProvider.devices;
+                          List<Device> displayDevices;
+                          if (_selectedRoomIndex == 0) {
+                            displayDevices = allDevices;
+                          } else {
+                            String roomName = _rooms[_selectedRoomIndex];
+                            displayDevices = allDevices.where((d) => d.roomName == roomName).toList();
+                          }
 
-                    return HomeDevicesBody(
-                      allDevices: allDevices,
-                      displayDevices: displayDevices,
-                      rooms: _rooms,
-                      selectedRoomIndex: _selectedRoomIndex,
-                      onRoomChanged: (index) {
-                        setState(() {
-                          _selectedRoomIndex = index;
-                        });
-                      },
-                      onCategoryTap: _navigateToCategory,
-                    );
-                  },
+                          return HomeDevicesBody(
+                            allDevices: allDevices,
+                            displayDevices: displayDevices,
+                            rooms: _rooms,
+                            selectedRoomIndex: _selectedRoomIndex,
+                            onRoomChanged: (index) => setState(() => _selectedRoomIndex = index),
+                            onCategoryTap: _navigateToCategory,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -198,36 +152,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        if (_houses.isEmpty)
-          const Text("My Home", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))
-        else
-          PopupMenuButton<House>(
-            onSelected: _onHouseSelected,
-            offset: const Offset(0, 40),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            itemBuilder: (context) => _houses.map((h) => PopupMenuItem<House>(
-              value: h,
-              child: Row(
-                children: [
-                  Icon(Icons.home, color: h.id == _currentHouse?.id ? Theme.of(context).primaryColor : Colors.grey, size: 20),
-                  const SizedBox(width: 10),
-                  Text(h.name, style: TextStyle(fontWeight: h.id == _currentHouse?.id ? FontWeight.bold : FontWeight.normal)),
-                ],
-              ),
-            )).toList(),
-            child: Row(
-              children: [
-                Text(
-                  _currentHouse?.name ?? "Loading...",
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 8),
-                _isLoadingHouse 
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.keyboard_arrow_down, size: 28),
-              ],
-            ),
-          ),
+        // 👇 THAY THẾ BẰNG WIDGET DÙNG CHUNG
+        const Expanded(child: HouseSelectorDropdown()), 
+        
         Row(
           children: [
             GestureDetector(
@@ -256,5 +183,42 @@ class _HomeScreenState extends State<HomeScreen> {
         )
       ],
     );
+  }
+}
+
+// --- WIDGET PHỤ ĐỂ THEO DÕI SỰ THAY ĐỔI NHÀ ---
+class _CheckHouseChange extends StatefulWidget {
+  final int? houseId;
+  final Function(int) onHouseChanged;
+  final Widget child;
+
+  const _CheckHouseChange({required this.houseId, required this.onHouseChanged, required this.child});
+
+  @override
+  State<_CheckHouseChange> createState() => _CheckHouseChangeState();
+}
+
+class _CheckHouseChangeState extends State<_CheckHouseChange> {
+  @override
+  void didUpdateWidget(covariant _CheckHouseChange oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Nếu ID nhà thay đổi, gọi hàm fetch dữ liệu mới
+    if (widget.houseId != null && widget.houseId != oldWidget.houseId) {
+      widget.onHouseChanged(widget.houseId!);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Gọi lần đầu tiên
+    if (widget.houseId != null) {
+      widget.onHouseChanged(widget.houseId!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }
