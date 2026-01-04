@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'utils/navigation_service.dart';
 import 'routes.dart';
-import 'config/app_config.dart';
+import 'config/app_config.dart'; // Đảm bảo file AppConfig mới nằm ở đây
 // ... import provider ...
 import 'package:provider/provider.dart';
 import 'providers/device_provider.dart';
-import 'providers/house_provider.dart'; // <--- Import mới
+import 'providers/house_provider.dart';
 import 'providers/smart_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Load cấu hình server
-  await AppConfig.loadBaseUrl();
+  // --- CẬP NHẬT MỚI ---
+  // Thay vì chỉ load chuỗi, giờ mình gọi hàm check kết nối thông minh
+  // Nó sẽ tự động ping server, nếu chết thì đổi sang Koyeb/Emulator
+  await AppConfig.loadConfig();
   
   // Khóa màn hình dọc
   await SystemChrome.setPreferredOrientations([
@@ -30,12 +32,13 @@ void main() async {
         ChangeNotifierProvider(create: (_) => HouseProvider()),
         ChangeNotifierProvider(create: (_) => SmartProvider()),
         
-        // Sau này nếu có thêm UserProvider hay NotificationProvider thì cứ thêm tiếp vào đây
+        // Sau này thêm các Provider khác vào đây
       ],
       child: const MyApp(), // MyApp bây giờ là con của Provider
     ),
   );
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -65,6 +68,8 @@ class MyApp extends StatelessWidget {
         ),
       ),
       // --- LUÔN BẮT ĐẦU TỪ SPLASH ---
+      // Tại màn hình Splash, vợ có thể kiểm tra lại biến AppConfig.baseUrl
+      // xem nó đang nhận IP nào nhé.
       initialRoute: AppRoutes.splash, 
       onGenerateRoute: AppRoutes.generateRoute,
     );

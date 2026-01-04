@@ -21,66 +21,81 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _startAppFlow() async {
-    await AppConfig.loadBaseUrl();
+    // --- THAY ĐỔI QUAN TRỌNG Ở ĐÂY ---
+    // Gọi hàm loadConfig thông minh để nó tự chọn URL (Koyeb hoặc Local cũ)
+    await AppConfig.loadConfig(); 
+    
+    // Sau khi AppConfig chọn xong URL, kiểm tra lại xem có mạng không
     bool isConnected = await ApiClient.checkConnection();
 
     if (!isConnected) {
       if (mounted) {
+        // Nếu mất mạng hoặc URL chết -> Hiện bảng nhập IP
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => ServerConfigDialog(onSaved: () => _startAppFlow()),
+          builder: (context) => ServerConfigDialog(
+            // Khi lưu IP mới xong thì chạy lại quy trình từ đầu
+            onSaved: () {
+              Navigator.pop(context); // Tắt dialog
+              _startAppFlow(); // Thử lại
+            } 
+          ),
         );
       }
     } else {
+      // Mạng ngon -> Kiểm tra đăng nhập
       _checkLoginStatus();
     }
   }
 
   void _checkLoginStatus() async {
+    // Đợi xíu cho hiệu ứng đẹp (tùy chọn)
     await Future.delayed(const Duration(milliseconds: 800)); 
 
     final prefs = await SharedPreferences.getInstance();
     final bool seenOnboarding = prefs.getBool('seenOnboarding') ?? false;
     final String? token = prefs.getString('jwt_token');
     
+    // 1. Chưa có Token -> Chưa đăng nhập
     if (token == null || token.isEmpty) {
       _navigateToAuth(seenOnboarding);
       return;
     }
 
-    // Nếu có Token, phải thử gọi API để xem Token còn sống không
+    // 2. Có Token -> Gọi thử API lấy danh sách nhà để xem Token còn sống không
     try {
       HouseService houseService = HouseService();
-      // Gọi API này để "thử lửa" Token
       final houses = await houseService.fetchMyHouses();
 
       if (!mounted) return;
 
       if (houses.isNotEmpty) {
+        // Token sống + Có nhà -> Vào thẳng màn hình chính
         await prefs.setBool('is_setup_completed', true);
+        
+        // Lưu lại nhà đầu tiên làm mặc định nếu chưa có
         if (prefs.getInt('currentHouseId') == null) {
           await prefs.setInt('currentHouseId', houses[0].id);
         }
+        
         Navigator.pushReplacementNamed(context, AppRoutes.home);
       } else {
-        // Token sống nhưng chưa có nhà -> Bắt buộc setup
+        // Token sống nhưng chưa tạo nhà -> Sang màn hình tạo nhà (Setup)
         await prefs.setBool('is_setup_completed', false);
         Navigator.pushReplacementNamed(context, AppRoutes.signUpSetup);
       }
     } catch (e) {
-      print("🚨 Splash Error (Thường do Token hết hạn): $e");
+      print("🚨 Splash Error (Thường do Token hết hạn hoặc Lỗi Server): $e");
       
       if (!mounted) return;
 
-      // NẾU LỖI API: Tuyệt đối không cho vào Home. 
-      // Xóa token cũ đi và đá về màn hình Login để lấy token mới.
+      // NẾU LỖI (401/403): Đá về màn hình Login
       await prefs.remove('jwt_token'); 
       _navigateToAuth(seenOnboarding);
     }
   }
 
-  // Hàm phụ để điều hướng gọn hơn
   void _navigateToAuth(bool seenOnboarding) {
     if (seenOnboarding) {
       Navigator.pushReplacementNamed(context, AppRoutes.loginOptions);
@@ -98,6 +113,7 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Logo
             Image.asset(
               'assets/images/logo.png',
               width: size.width * 0.25,
@@ -105,9 +121,16 @@ class _SplashScreenState extends State<SplashScreen> {
                 const Icon(Icons.smart_toy, size: 80, color: Colors.white),
             ),
             const SizedBox(height: 20),
-            const Text('Smartify', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+            // Tên App
+            const Text(
+              'Smartify', 
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)
+            ),
             const SizedBox(height: 40),
-            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+            // Vòng quay loading
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white)
+            ),
           ],
         ),
       ),
