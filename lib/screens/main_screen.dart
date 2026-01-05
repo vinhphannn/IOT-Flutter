@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // 1. Thêm import Provider
+import '../../providers/house_provider.dart'; // 2. Thêm import HouseProvider
 // Import 4 trang con
 import 'home/home_screen.dart';
 import 'profile/account_screen.dart';
@@ -41,7 +43,7 @@ class _MainScreenState extends State<MainScreen> {
             _selectedIndex = index;
           });
         },
-        type: BottomNavigationBarType.fixed, // Quan trọng để hiện đủ 4 nút
+        type: BottomNavigationBarType.fixed,
         selectedItemColor: primaryColor,
         unselectedItemColor: Colors.grey[400],
         showUnselectedLabels: true,
@@ -55,10 +57,8 @@ class _MainScreenState extends State<MainScreen> {
       ),
       
       // --- CẤU HÌNH NÚT NỔI (FAB) ---
-      // Chỉ hiện ở trang Home (index == 0)
       floatingActionButton: _selectedIndex == 0 
         ? Container(
-            // Thêm khoảng cách dưới đáy để nút không dính sát thanh điều hướng
             margin: const EdgeInsets.only(bottom: 20), 
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -66,9 +66,8 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 // 1. NÚT MIC (VOICE ASSISTANT)
                 FloatingActionButton(
-                  heroTag: "btn_mic", // Tag riêng để tránh lỗi
+                  heroTag: "btn_mic",
                   onPressed: () {
-                    // Chuyển sang trang Voice Assistant
                     Navigator.pushNamed(context, AppRoutes.voiceAssistant);
                   },
                   backgroundColor: Colors.blue[50], 
@@ -80,11 +79,28 @@ class _MainScreenState extends State<MainScreen> {
                 
                 const SizedBox(width: 16),
                 
-                // 2. NÚT ADD DEVICE
+                // 2. NÚT ADD DEVICE - ĐÃ THÊM CHECK QUYỀN
                 FloatingActionButton(
-                  heroTag: "btn_add", // Tag riêng
+                  heroTag: "btn_add",
                   onPressed: () {
-                     Navigator.pushNamed(context, AppRoutes.addDevice);
+                    // 👇 BẮT ĐẦU CHECK QUYỀN VỢ NHÉ
+                    final houseProvider = context.read<HouseProvider>();
+                    final String userRole = (houseProvider.currentRole ?? "MEMBER").toUpperCase();
+
+                    if (userRole == "OWNER" || userRole == "ADMIN") {
+                      // ✅ ĐỦ QUYỀN -> CHO VÀO TRANG THÊM THIẾT BỊ
+                      Navigator.pushNamed(context, AppRoutes.addDevice);
+                    } else {
+                      // ❌ KHÔNG ĐỦ QUYỀN -> HIỆN THÔNG BÁO
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Bạn không có quyền thêm thiết bị trong nhà này!"),
+                          backgroundColor: Colors.redAccent,
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
                   },
                   backgroundColor: primaryColor, 
                   elevation: 4, 
@@ -96,7 +112,6 @@ class _MainScreenState extends State<MainScreen> {
           ) 
         : null,
       
-      // Định vị trí nút nổi ở góc dưới bên phải
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }

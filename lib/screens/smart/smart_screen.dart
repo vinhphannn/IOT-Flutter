@@ -170,17 +170,36 @@ class _SmartScreenState extends State<SmartScreen> with SingleTickerProviderStat
       ),
 
       // 4. FLOATING ACTION BUTTON (+)
+     // 4. FLOATING ACTION BUTTON (+)
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // Chờ kết quả từ trang tạo
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const CreateSceneScreen()),
-          );
+          final houseProvider = context.read<HouseProvider>();
+          final smartProvider = context.read<SmartProvider>();
           
-          // Tạo xong quay về thì reload lại list
-          if (houseId != null && context.mounted) {
-             context.read<SmartProvider>().fetchScenes(houseId);
+          // Lấy Role đã được Provider cập nhật tự động ở trên
+          final String userRole = (houseProvider.currentRole ?? "MEMBER").toUpperCase();
+
+          // ✅ Kiểm tra quyền ngay tại đây (OWNER hoặc ADMIN)
+          if (userRole == "OWNER" || userRole == "ADMIN") {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CreateSceneScreen()),
+            );
+            
+            // Reload danh sách khi quay về
+            if (houseProvider.currentHouse != null) {
+               smartProvider.fetchScenes(houseProvider.currentHouse!.id);
+            }
+          } 
+          // ❌ Báo lỗi nếu chỉ là MEMBER
+          else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("You have no right"),
+                backgroundColor: Colors.redAccent,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           }
         },
         backgroundColor: primaryColor,

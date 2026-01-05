@@ -58,7 +58,7 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
     }
   }
 
-  // --- HÀM SỬA TÊN NHÀ (ĐÃ FIX LỖI) ---
+  // --- HÀM SỬA TÊN NHÀ ---
   void _showRenameDialog() {
     final TextEditingController nameController = TextEditingController(
       text: _currentHouseName,
@@ -70,7 +70,6 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
       onSave: () async {
         final newName = nameController.text.trim();
         if (newName.isNotEmpty) {
-          // Gọi API cập nhật tên nhà
           bool success = await _houseService.updateHouseName(
             widget.house.id,
             newName,
@@ -84,8 +83,8 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
     );
   }
 
-  // --- POPUP THÔNG BÁO THÀNH CÔNG ---
-  void _showSuccessDeletePopup() {
+  // --- POPUP THÔNG BÁO THÀNH CÔNG (CẬP NHẬT THEO HÀNH ĐỘNG) ---
+  void _showSuccessPopup(String actionType) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -105,7 +104,9 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
             ),
             const SizedBox(height: 24),
             Text(
-              "\"$_currentHouseName\" has been successfully deleted!",
+              actionType == 'DELETE' 
+                ? "\"$_currentHouseName\" has been successfully deleted!"
+                : "You have successfully left \"$_currentHouseName\"!",
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -113,7 +114,6 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
         ),
       ),
     );
-    // Tự động đóng sau 2s và quay về màn hình trước
     Timer(const Duration(seconds: 2), () {
       if (mounted) {
         Navigator.pop(context); // Đóng popup
@@ -122,14 +122,14 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
     });
   }
 
-  // --- POPUP XÁC NHẬN XÓA ---
-  void _onDeleteHouse() async {
-    if (_myRole?.toUpperCase() != 'OWNER') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Only Owner can delete this home!")),
-      );
-      return;
-    }
+  // --- HÀM XỬ LÝ XÓA HOẶC RỜI NHÀ ---
+  void _handleHouseAction() async {
+    final bool isOwner = _myRole?.toUpperCase() == 'OWNER';
+    final String title = isOwner ? "Delete Home" : "Leave Home";
+    final String content = isOwner 
+        ? "Are you sure you want to delete this home? All members will be removed and devices unpaired." 
+        : "Are you sure you want to leave this home? You will no longer have access to its devices.";
+    final String confirmText = isOwner ? "Yes, Delete" : "Yes, Leave";
 
     showModalBottomSheet(
       context: context,
@@ -143,15 +143,9 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Delete Home", style: TextStyle(color: Colors.red, fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(color: Colors.red, fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 24),
-            const Text("Are you sure you want to delete this home?", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            const Text(
-              "After the home is deleted, all members will be removed, and all devices will be unpaired.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
+            Text(content, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 32),
             Row(
               children: [
@@ -175,14 +169,17 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
                     child: ElevatedButton(
                       onPressed: () async {
                         Navigator.pop(context); // Đóng xác nhận
+                        // BE xử lý: Nếu Owner thì xóa, nếu Member thì xóa member record (Rời nhà)
                         bool success = await _houseService.deleteHouse(widget.house.id);
-                        if (success) _showSuccessDeletePopup();
+                        if (success) {
+                          _showSuccessPopup(isOwner ? 'DELETE' : 'LEAVE');
+                        }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4B6EF6),
+                        backgroundColor: Colors.red,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                       ),
-                      child: const Text("Yes, Delete", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      child: Text(confirmText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ),
@@ -246,6 +243,7 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
   @override
   Widget build(BuildContext context) {
     bool isOwner = _myRole?.toUpperCase() == 'OWNER';
+    bool isAdminOrOwner = isOwner || _myRole?.toUpperCase() == 'ADMIN';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -270,10 +268,21 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
                       children: [
                         _buildRowItem("Home Name", _currentHouseName, onTap: isOwner ? _showRenameDialog : null),
                         _buildDivider(),
-                        _buildRowItem("Room Management", "$_roomCount Room(s)", onTap: () async {
-                          await Navigator.push(context, MaterialPageRoute(builder: (context) => RoomManagementScreen(houseId: widget.house.id)));
-                          _fetchAllData();
-                        }),
+                        _buildRowItem(
+                          "Room Management", 
+                          "$_roomCount Room(s)", 
+                          onTap: () async {
+                            // 👇 CHECK QUYỀN TRƯỚC KHI VÀO ROOM MANAGEMENT
+                            if (isAdminOrOwner) {
+                              await Navigator.push(context, MaterialPageRoute(builder: (context) => RoomManagementScreen(houseId: widget.house.id)));
+                              _fetchAllData();
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("You don't have permission to manage rooms!"), backgroundColor: Colors.orange),
+                              );
+                            }
+                          }
+                        ),
                         _buildDivider(),
                         _buildRowItem("Device Management", "$_deviceCount Device(s)"),
                         _buildDivider(),
@@ -291,7 +300,7 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text("Home Members (${_members.length})", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            if (isOwner || _myRole?.toUpperCase() == 'ADMIN')
+                            if (isAdminOrOwner)
                               Container(
                                 width: 32, height: 32,
                                 decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
@@ -312,8 +321,11 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
                             final member = _members[index];
                             return InkWell(
                               onTap: () async {
-                                final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => MemberDetailScreen(houseId: widget.house.id, member: member)));
-                                if (result == true) _fetchAllData();
+                                // Chỉ Admin/Owner mới xem được chi tiết thành viên khác
+                                if (isAdminOrOwner) {
+                                  final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => MemberDetailScreen(houseId: widget.house.id, member: member)));
+                                  if (result == true) _fetchAllData();
+                                }
                               },
                               child: Row(
                                 children: [
@@ -332,18 +344,21 @@ class _HomeDetailScreenState extends State<HomeDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 40),
+                  
+                  // 👇 NÚT DELETE HOẶC LEAVE DƯỚI ĐÁY
                   SizedBox(
                     height: 50,
                     child: OutlinedButton(
-                      onPressed: isOwner ? _onDeleteHouse : () {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("You don't have permission to delete this home!")));
-                      },
+                      onPressed: _handleHouseAction,
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: isOwner ? Colors.red : Colors.grey.shade300),
+                        side: const BorderSide(color: Colors.red),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        backgroundColor: isOwner ? Colors.white : Colors.grey.shade50,
+                        backgroundColor: Colors.white,
                       ),
-                      child: Text("Delete Home", style: TextStyle(color: isOwner ? Colors.red : Colors.grey, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        isOwner ? "Delete Home" : "Leave Home", 
+                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
+                      ),
                     ),
                   ),
                 ],

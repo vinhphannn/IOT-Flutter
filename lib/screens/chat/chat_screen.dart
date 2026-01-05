@@ -42,35 +42,51 @@ class _ChatScreenState extends State<ChatScreen> {
     _messages.add(ChatMessage(text: "Hello! 👋 Tui là trợ lý ảo Smartify đây. Tui giúp gì được cho bạn nè?", isUser: false, time: _getCurrentTime()));
   }
 
-  // --- LOGIC WEBSOCKET ---
-  void _loadUserId() async {
+void _loadUserId() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
+    
+    // 👇 Sửa đoạn này để tránh bị lỗi ép kiểu (Type Cast)
+    Object? rawId = prefs.get('userId'); // Lấy dữ liệu thô, không ép kiểu ngay
+    
     setState(() {
-      _userId = prefs.getInt('userId')?.toString() ?? "guest";
+      if (rawId != null) {
+        _userId = rawId.toString(); // Chuyển tất cả về String cho chắc ăn
+      } else {
+        _userId = "guest";
+      }
     });
-    _initWebSocket();
+
+    print("🆔 Chat UserId chuẩn bị kết nối: $_userId");
+    _initWebSocket(); // Lúc này mới gọi khởi tạo Socket nè
   }
 
-  void _initWebSocket() {
+ void _initWebSocket() {
     if (_userId == null) return;
 
     _stompClient = StompClient(
       config: StompConfig(
         url: AppConfig.webSocketUrl, 
         onConnect: (frame) {
-          // Lắng nghe câu trả lời từ AI
+          print("✅ Đã kết nối STOMP thành công!"); // Log này hiện ra mới là chuẩn
+          
+          // 👇 PHẢI SUBSCRIBE Ở ĐÂY (Trong onConnect)
           _stompClient!.subscribe(
             destination: '/topic/chat/$_userId', 
             callback: (frame) {
               if (frame.body != null) {
+                print("📥 Có tin nhắn mới từ AI: ${frame.body}");
                 final data = jsonDecode(frame.body!);
                 _receiveAiMessage(data['text']);
               }
             },
           );
         },
-        onStompError: (frame) => print("❌ Lỗi Chat Socket: ${frame.body}"),
-        webSocketConnectHeaders: {"transports": ["websocket"]},
+        onStompError: (frame) => print("❌ Lỗi STOMP: ${frame.body}"),
+        onWebSocketError: (error) => print("❌ Lỗi WebSocket: $error"),
+        webSocketConnectHeaders: {
+          "transports": ["websocket"],
+          "Origin": "https://iot-java-spring-boot-production.up.railway.app"
+        },
       ),
     );
     _stompClient!.activate();

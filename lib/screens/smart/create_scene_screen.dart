@@ -136,6 +136,9 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
     // 👇 1. LẤY HOUSE ID TỪ PROVIDER (THAY VÌ HARDCODE 1)
     final houseProvider = context.read<HouseProvider>();
     final currentHouseId = houseProvider.currentHouse?.id;
+    // 👇 THÊM 2 DÒNG NÀY ĐỂ SOI LỖI
+    print("🏠 Nhà đang chọn trong Provider là: $currentHouseId");
+    print("🚀 Đang gửi yêu cầu tạo Scene với houseId: $currentHouseId");
 
     if (currentHouseId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: No house selected!"), backgroundColor: Colors.red));
