@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // 1. Import Provider
+import '../../providers/house_provider.dart'; // 2. Import HouseProvider
 import '../../services/smart_service.dart';
 import '../../models/device_model.dart';
 import 'weather_condition_screen.dart';
@@ -46,7 +48,7 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
         _actions.add({
           "type": "CONTROL_DEVICE",
           "targetDeviceId": device.id,
-          "actionData": actionData, // Ví dụ: {"relay": false} hoặc {"cmd": "ON"}
+          "actionData": actionData,
           
           // Data hiển thị UI
           "displayTitle": "Control: ${device.name}",
@@ -60,9 +62,6 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
 
   // --- 3. HIỆN POPUP NHẬP TÊN & LƯU ---
   void _showNameInputDialog() {
-    // Kiểm tra điều kiện tối thiểu
-    // Tap-to-Run: Cần ít nhất 1 Action, không cần Condition
-    // Automation: Cần ít nhất 1 Condition và 1 Action
     if (_actions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please add at least one Task (Then)")));
       return;
@@ -134,29 +133,29 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
 
   // --- 4. XỬ LÝ DỮ LIỆU & GỌI API ---
   void _processSaveData(String sceneName) async {
+    // 👇 1. LẤY HOUSE ID TỪ PROVIDER (THAY VÌ HARDCODE 1)
+    final houseProvider = context.read<HouseProvider>();
+    final currentHouseId = houseProvider.currentHouse?.id;
+
+    if (currentHouseId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: No house selected!"), backgroundColor: Colors.red));
+      return;
+    }
+
     setState(() => _isSaving = true);
 
-    // A. Xác định loại Scene (Logic Backend yêu cầu)
+    // A. Xác định loại Scene
     String sceneType = _conditions.isEmpty ? "TAP_TO_RUN" : "AUTOMATION";
 
     // B. Map dữ liệu Conditions (IF)
     List<Map<String, dynamic>> apiConditions = _conditions.map((c) {
       Map<String, dynamic> cond = {
-        "type": c["type"], // SCHEDULE, WEATHER_TEMP...
+        "type": c["type"],
         "operator": c["operator"] ?? "==", 
         "value": c["value"]
       };
-      
-      // Nếu là Schedule -> Gửi daysOfWeek
-      if (c.containsKey("daysOfWeek")) {
-        cond["daysOfWeek"] = c["daysOfWeek"];
-      }
-      
-      // Nếu là Device Status -> Gửi triggerDeviceId
-      if (c.containsKey("triggerDeviceId")) {
-        cond["triggerDeviceId"] = c["triggerDeviceId"];
-      }
-
+      if (c.containsKey("daysOfWeek")) cond["daysOfWeek"] = c["daysOfWeek"];
+      if (c.containsKey("triggerDeviceId")) cond["triggerDeviceId"] = c["triggerDeviceId"];
       return cond;
     }).toList();
 
@@ -164,18 +163,17 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
     List<Map<String, dynamic>> apiActions = _actions.map((a) => {
       "type": "CONTROL_DEVICE",
       "targetDeviceId": a["targetDeviceId"],
-      "delaySeconds": 0, // Backend yêu cầu
-      "actionData": a["actionData"] // JSON lệnh (FE gửi gì BE nhận nấy)
+      "delaySeconds": 0,
+      "actionData": a["actionData"]
     }).toList();
 
-    // D. Chọn Icon và Màu (Vợ có thể làm logic random hoặc cho user chọn sau)
     String iconUrl = sceneType == "TAP_TO_RUN" ? "assets/icons/touch.png" : "assets/icons/clock.png";
     String colorCode = sceneType == "TAP_TO_RUN" ? "#5D3FD3" : "#FFCC00";
 
     // E. Gọi Service
     bool success = await _smartService.createScene(
       name: sceneName,
-      houseId: 1, // Lấy từ Provider/Global state
+      houseId: currentHouseId, // 👈 2. SỬ DỤNG ID VỪA LẤY
       type: sceneType,
       iconUrl: iconUrl,
       colorCode: colorCode,
@@ -193,10 +191,6 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
       }
     }
   }
-
-  // ... (Phần UI Build bên dưới giữ nguyên) ...
-  // CHỒNG GIỮ LẠI NGUYÊN VẸN CÁC HÀM UI CŨ CỦA VỢ ĐỂ KHÔNG BỊ LỖI
-  // CHỈ THAY ĐỔI LOGIC GỌI HÀM _onSaveScene THÀNH _showNameInputDialog
 
   @override
   Widget build(BuildContext context) {
@@ -243,13 +237,11 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
             ),
           ),
           
-          // NÚT SAVE -> GỌI POPUP NHẬP TÊN
           Padding(
             padding: const EdgeInsets.all(20),
             child: SizedBox(
               width: double.infinity, height: 55,
               child: ElevatedButton(
-                // 👇 Thay đổi ở đây: Gọi _showNameInputDialog thay vì lưu ngay
                 onPressed: _isSaving ? null : _showNameInputDialog,
                 style: ElevatedButton.styleFrom(backgroundColor: primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
                 child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text("Save", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
@@ -261,9 +253,7 @@ class _CreateSceneScreenState extends State<CreateSceneScreen> {
     );
   }
 
-  // --- CÁC HÀM UI PHỤ TRỢ (POPUP, HEADER, CARD) ---
-  // (Giữ nguyên như cũ, chỉ copy paste lại để vợ không bị thiếu code)
-  
+  // --- CÁC WIDGET UI (GIỮ NGUYÊN) ---
   void _showAddConditionModal() {
      showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
